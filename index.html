@@ -60,6 +60,19 @@
   #canvas{
     position:absolute; inset:0; touch-action:none;
   }
+  @media (min-width:761px){
+    /* PC 화면: 창 크기·모니터 해상도에 따라 캔버스의 실제 표시 폭이 달라져도(예: 배경을
+       스크롤 없이 맞추는 기능 때문에 창마다 폭이 달라짐), 말풍선·장비 아이콘 크기와 위치가
+       항상 똑같은 비율로 보이도록 "고정 기준 해상도" 위에 그린 뒤 JS(updateCanvasScale)가
+       transform:scale()로 실제 표시 크기에 맞게 통째로 축소/확대한다. 위치(%)는 물론 아이콘
+       크기·글자 크기 같은 px 값도 화면 크기와 무관하게 항상 같은 비율로 유지됨.
+       (모바일은 화면이 좁아 그대로 비율을 맞추면 글씨가 너무 작아지므로 이 규칙에서 제외) */
+    #canvas{
+      inset:auto; top:0; left:0;
+      width:1200px; height:744px; /* CANVAS_REF_WIDTH와 반드시 같은 값 유지 (744 = 1200*0.62) */
+      transform-origin:top left;
+    }
+  }
   input[type=range]{ touch-action:manipulation; } /* 슬라이더는 원래대로 터치 드래그 가능하게 유지 */
   #lineModeBtn.active-line-mode, #zoneRectBtn.active-line-mode, #zoneCircleBtn.active-line-mode{
     background:var(--blue); border-color:var(--blue);
@@ -177,6 +190,17 @@
   /* 말풍선 크기조절(리사이즈) 손잡이가 말풍선 아래로 10px 튀어나와 있어서, 패널을 그보다 더
      아래로 내려 겹치지 않게 함 (겹치면 손잡이를 눌렀는데 패널이 클릭을 가로채는 문제 발생) */
   .style-panel-bubble{ margin-top:20px; }
+  /* 말풍선/마커가 배경(캔버스) 아래쪽 가장자리에 가까워서 패널이 아래로 열리면 화면 밖으로
+     잘리거나 하단 바(footer)와 겹치는 경우, JS(adjustStylePanelPosition)가 이 클래스를 붙여서
+     빈 공간이 있는 옆쪽(오른쪽 우선, 안되면 왼쪽)으로 패널을 옮겨 연다. */
+  .style-panel-side-right{
+    top:0 !important; left:100% !important; margin-top:0 !important; margin-left:10px !important;
+    transform:none !important;
+  }
+  .style-panel-side-left{
+    top:0 !important; left:auto !important; right:100% !important;
+    margin-top:0 !important; margin-right:10px !important; transform:none !important;
+  }
   .swatch-row{ display:flex; gap:5px; justify-content:center; }
   .swatch{
     width:18px; height:18px; border-radius:50%; cursor:pointer; border:2px solid transparent;
@@ -225,10 +249,51 @@
   #appBody{display:flex; gap:14px; align-items:flex-start;}
   #leftCol{flex:1; min-width:0;}
   #rightCol{
-    width:150px; flex-shrink:0; background:#fff; border:1px solid #ddd; border-radius:8px;
-    padding:10px; position:sticky; top:14px;
+    width:460px; flex-shrink:0;
+    display:flex; flex-direction:row; align-items:flex-start; gap:12px;
+    position:sticky; top:14px;
+    max-height:calc(100vh - 36px); overflow-y:auto;
   }
   #rightCol h3{font-size:13px; margin:0 0 8px; color:var(--green); text-align:center;}
+
+  /* PC 화면: 상단에 있던 헤드·저장·출력·말풍선/선/구역 메뉴들을 우측 빈 공간으로 옮기고,
+     "설정"(#sidebarToolsSlot)과 "장비 추가"(#equipSection) 두 영역을 나란히 2열로 분리해서
+     한눈에 구분되게 한다 (JS relocateToolbars 참고). 배경(캔버스)이 시작되는 위치도 위로 당겨져
+     화면을 더 크게 쓸 수 있다. */
+  #sidebarToolsSlot, #equipSection{
+    background:#fff; border:1px solid #ddd; border-radius:8px; padding:10px;
+    flex:1 1 0; min-width:0;
+  }
+  #sidebarToolsSlot:empty{ display:none; padding:0; border:none; flex:0 0 0; } /* 모바일: 원래 자리로 돌아가 비어있을 때 */
+  /* 세로 간격은 각 .toolbar 자체의 margin-bottom(기본 10px, 접혔을 때는 0)에 맡긴다.
+     부모에 gap을 쓰면, 헤드·저장 패널이 접혀 높이가 0이 되어도 gap이 그대로 남아
+     "빈 공간"이 생기는 문제가 있었음 → gap 대신 margin-bottom만 사용해서 접힌 패널은
+     실제로 자리를 차지하지 않게 함 */
+  #sidebarToolsSlot{ display:flex; flex-direction:column; }
+  #sidebarToolsSlot .toolbar{
+    background:none; border:none; border-radius:0; padding:0;
+    flex-direction:column; align-items:stretch; gap:8px; min-width:0;
+  }
+  #sidebarToolsSlot .toolbar:not(.collapsed):not(:last-child){
+    border-bottom:1px solid #eee; padding-bottom:10px;
+  }
+  /* min-width:0 필수: flex 자식은 기본적으로 min-width:auto라 내용(특히 <input type=date>의
+     기본 최소 폭) 때문에 부모보다 넓어져 옆 칸(장비추가 카드) 쪽으로 넘치는 문제가 있었음 */
+  #sidebarToolsSlot .toolbar .group{
+    border-right:none; padding-right:0; margin-right:0; flex-wrap:wrap; min-width:0; width:100%;
+    border-bottom:1px solid #eee; padding-bottom:8px;
+  }
+  #sidebarToolsSlot .toolbar .group:last-child{ border-bottom:none; padding-bottom:0; }
+  #sidebarToolsSlot button{ width:100%; justify-content:center; }
+  /* 헤드·저장 패널의 원래 max-height:80px는 가로로 넓게 한 줄(원래 상단 툴바) 기준으로 잡힌 값이라,
+     좁은 열 안에서 입력칸들이 줄바꿈되면 내용이 잘리거나, 둘 다 펼쳤을 때 아래쪽이 잘리는 문제가
+     있었음 → 사이드바 안에서는 충분히 큰 값으로 늘려서 (헤드+저장 동시에 펼쳐도) 잘리지 않게 함 */
+  /* :not(.collapsed)로 한정해야 함 — 안 그러면 이 규칙의 특이도(ID 2개)가 기존
+     "#headPanel.collapsed{max-height:0}"(ID 1개+클래스 1개)보다 높아서 접힘 자체가 무시돼버림 */
+  #sidebarToolsSlot #headPanel:not(.collapsed), #sidebarToolsSlot #savePanel:not(.collapsed){ max-height:400px; }
+  #sidebarToolsSlot select{ width:100%; }
+  #sidebarToolsSlot input[type=text]{ width:100%; }
+  #siteNameInput{ width:180px; } /* 사이드바 밖(모바일 등)에서의 기본 폭 — 사이드바 안에서는 위 규칙(width:100%)이 우선 적용됨 */
 
   #eqPalette{display:flex; flex-direction:column; gap:8px;}
   .eq-chip{
@@ -260,7 +325,7 @@
 
   @media (max-width:760px){
     #appBody{flex-direction:column;}
-    #rightCol{width:100%; position:static;}
+    #rightCol{width:100%; position:static; max-height:none; overflow-y:visible; flex-direction:column;}
     #eqPalette{flex-direction:row; flex-wrap:wrap;}
     .eq-chip{width:70px;}
   }
@@ -358,7 +423,7 @@
   3) 저장 후 다시 열면 이 안내는 사라지고, 여러 명이 같은 파일(URL)로 접속 시 실시간으로 동기화됩니다.
 </div>
 
-<div class="toolbar">
+<div class="toolbar" id="topToolbarRow1">
   <div class="group">
     <button class="secondary" id="headToggleBtn" onclick="toggleHeadPanel()">
       <svg class="icn" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="18" r="2"/></svg>헤드·배경 설정
@@ -414,7 +479,7 @@
 <div class="toolbar" id="headPanel">
   <div class="group">
     <label>현장명</label>
-    <input type="text" id="siteNameInput" value="" placeholder="현장명을 입력하세요" style="width:180px;">
+    <input type="text" id="siteNameInput" value="" placeholder="현장명을 입력하세요">
     <label>작업일</label>
     <input type="date" id="workDate">
     <button onclick="applyHeader()">헤드 적용</button>
@@ -428,9 +493,11 @@
   </div>
 </div>
 
+<div id="topToolsAnchor"></div>
 <div id="appBody">
   <div id="leftCol">
-    <div class="toolbar">
+    <div id="canvasToolsAnchor"></div>
+    <div class="toolbar" id="canvasToolsRow">
       <div class="group">
         <button onclick="addBubble()">
           <svg class="icn" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 12.5 3h.5a8.5 8.5 0 0 1 8 8.5z"/></svg>작업 말풍선 추가
@@ -467,14 +534,17 @@
   </div>
 
   <div id="rightCol">
-    <h3><svg class="icn" viewBox="0 0 24 24" style="width:16px;height:16px;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"/></svg> 장비 추가</h3>
-    <div id="eqPalette"></div>
-    <button class="secondary" style="width:100%; margin-top:10px;" onclick="addCustomEquipType()">
-      <svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>장비 종류 추가
-    </button>
-    <button class="danger" style="width:100%; margin-top:6px;" onclick="resetEquipTypes()">
-      <svg class="icn" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>장비 초기화
-    </button>
+    <div id="sidebarToolsSlot"></div>
+    <div id="equipSection">
+      <h3><svg class="icn" viewBox="0 0 24 24" style="width:16px;height:16px;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"/></svg> 장비 추가</h3>
+      <div id="eqPalette"></div>
+      <button class="secondary" style="width:100%; margin-top:10px;" onclick="addCustomEquipType()">
+        <svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>장비 종류 추가
+      </button>
+      <button class="danger" style="width:100%; margin-top:6px;" onclick="resetEquipTypes()">
+        <svg class="icn" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>장비 초기화
+      </button>
+    </div>
   </div>
 </div>
 
@@ -551,6 +621,27 @@ function resetSelectTimer(){
 }
 /* 선택 변경 시 캔버스를 통째로 다시 그리지 않고, 컨트롤(슬라이더/리사이즈 핸들)만 붙였다 뗀다.
    (통째로 다시 그리면 더블클릭 텍스트 편집 인식이 끊길 수 있어 이렇게 처리) */
+/* 말풍선/마커 스타일 패널(선 특성 선택 등)이 기본값(아래쪽)으로 열렸을 때 캔버스(배경) 아래
+   가장자리를 벗어나 잘리거나 하단 바와 겹치면, 오른쪽 빈 공간으로 옮기고(그래도 부족하면 왼쪽)
+   위치를 자동 보정한다. */
+function adjustStylePanelPosition(panel, hostEl){
+  if(!panel || !hostEl || !canvasWrap) return;
+  panel.classList.remove('style-panel-side-right', 'style-panel-side-left');
+  const wrapRect = canvasWrap.getBoundingClientRect();
+  let panelRect = panel.getBoundingClientRect();
+  if(panelRect.bottom <= wrapRect.bottom - 4) return; // 아래쪽에 자리가 충분하면 기존 방식 유지
+  panel.classList.add('style-panel-side-right');
+  panelRect = panel.getBoundingClientRect();
+  if(panelRect.right > wrapRect.right - 4){
+    panel.classList.remove('style-panel-side-right');
+    panel.classList.add('style-panel-side-left');
+    panelRect = panel.getBoundingClientRect();
+    if(panelRect.left < wrapRect.left + 4){
+      // 양옆도 다 부족한 극단적인 경우: 옆으로 옮겨도 소용없으니 기본(아래쪽) 배치로 되돌림
+      panel.classList.remove('style-panel-side-left');
+    }
+  }
+}
 function updateSelectionUI(prevId, newId){
   if(prevId){
     const prevEl = canvas.querySelector(`[data-oid="${prevId}"]`);
@@ -574,10 +665,14 @@ function updateSelectionUI(prevId, newId){
         newEl.appendChild(buildDeleteBtn(obj));
         newEl.appendChild(buildOpacitySliderEl(obj, newEl));
         newEl.appendChild(buildBubbleResizeHandleEl(obj, newEl));
-        newEl.appendChild(buildStylePanelEl(obj, ()=>{ applyBubbleStyle(newEl, obj); }, 'bubble', textEl));
+        const bubblePanel = buildStylePanelEl(obj, ()=>{ applyBubbleStyle(newEl, obj); }, 'bubble', textEl);
+        newEl.appendChild(bubblePanel);
+        adjustStylePanelPosition(bubblePanel, newEl);
       } else if(obj.type === 'line' || obj.type === 'zone'){
         newEl.appendChild(buildMarkerControlsEl(obj));
-        newEl.appendChild(buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker'));
+        const markerPanel = buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker');
+        newEl.appendChild(markerPanel);
+        adjustStylePanelPosition(markerPanel, newEl);
       } else { // equip
         const iconContentDiv = newEl.querySelector('.icon-content');
         const iconWrap = newEl.querySelector('.icon');
@@ -952,7 +1047,9 @@ function buildLineMarker(obj){
 
   if(obj.id === selectedId){
     wrap.appendChild(buildMarkerControlsEl(obj));
-    wrap.appendChild(buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker'));
+    const markerPanel = buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker');
+    wrap.appendChild(markerPanel);
+    adjustStylePanelPosition(markerPanel, wrap);
   }
   return wrap;
 }
@@ -1732,6 +1829,7 @@ function buildBubbleEl(obj){
     el.appendChild(buildBubbleResizeHandleEl(obj, el));
     const panel = buildStylePanelEl(obj, ()=>{ applyBubbleStyle(el, obj); }, 'bubble', textEl);
     el.appendChild(panel);
+    adjustStylePanelPosition(panel, el);
   }
 
   function enterBubbleTextEdit(){
@@ -2098,12 +2196,14 @@ function toggleHeadPanel(){
   const collapsed = panel.classList.toggle('collapsed');
   const chevron = document.getElementById('headChevron');
   if(chevron) chevron.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+  scheduleFitCanvas(220); // 패널 접힘/펼침 트랜지션(0.2s) 끝난 뒤 남는 세로 공간 다시 계산
 }
 function toggleSavePanel(){
   const panel = document.getElementById('savePanel');
   const collapsed = panel.classList.toggle('collapsed');
   const chevron = document.getElementById('saveChevron');
   if(chevron) chevron.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+  scheduleFitCanvas(220);
 }
 function toggleExportMenu(){
   document.getElementById('exportMenu').classList.toggle('open');
@@ -2390,6 +2490,82 @@ async function exportImage(){
   document.body.removeChild(a);
 }
 
+/* ---------------- PC 화면 맞춤: 스크롤 없이 배경(캔버스)이 한 화면에 다 보이도록 자동 축소 ----------------
+   #canvasWrap은 padding-top:62%(너비 기준 세로/가로 비율)로 종횡비를 유지하는데, 이 비율을 그대로
+   둔 채 #printArea의 최대 너비만 화면에 남는 세로 공간에 맞춰 줄이면 스크롤 없이 전체가 보인다.
+   (좁은 화면/모바일은 기존처럼 전체 폭을 그대로 쓰고 스크롤을 허용한다 — 억지로 줄이면 글씨가 너무
+   작아져 오히려 사용성이 나빠짐) */
+/* PC 화면: 상단에 있던 헤드·저장·출력·말풍선/선/구역 메뉴들을 우측 사이드바 빈 공간으로 옮겨서
+   배경(캔버스)이 차지할 수 있는 세로 공간을 넓힌다. 좁은 화면(모바일)에서는 원래 위치로 되돌려
+   놓아 기존처럼 위→아래 순서로 조작할 수 있게 한다. (요소를 옮기기만 할 뿐, 버튼의 id·기능은
+   그대로라 동작에는 영향이 없음) */
+function relocateToolbars(){
+  const anchor1 = document.getElementById('topToolsAnchor');
+  const anchor2 = document.getElementById('canvasToolsAnchor');
+  const slot = document.getElementById('sidebarToolsSlot');
+  const row1 = document.getElementById('topToolbarRow1');
+  const headPanel = document.getElementById('headPanel');
+  const savePanel = document.getElementById('savePanel');
+  const canvasToolsRow = document.getElementById('canvasToolsRow');
+  if(!anchor1 || !anchor2 || !slot || !row1 || !headPanel || !savePanel || !canvasToolsRow) return;
+  const wide = window.innerWidth > 760;
+  const isRelocated = slot.contains(row1);
+  if(wide && !isRelocated){
+    slot.appendChild(row1);
+    slot.appendChild(headPanel);
+    slot.appendChild(savePanel);
+    slot.appendChild(canvasToolsRow);
+  } else if(!wide && isRelocated){
+    const topParent = anchor1.parentNode;
+    topParent.insertBefore(row1, anchor1);
+    topParent.insertBefore(savePanel, anchor1);
+    topParent.insertBefore(headPanel, anchor1);
+    anchor2.parentNode.insertBefore(canvasToolsRow, anchor2.nextSibling);
+  }
+}
+const CANVAS_ASPECT_RATIO = 0.62; // #canvasWrap { padding-top:62% } 과 반드시 같은 값 유지
+function fitCanvasToViewport(){
+  const printArea = document.getElementById('printArea');
+  if(!printArea) return;
+  if(window.innerWidth <= 760){
+    printArea.style.maxWidth = ''; // 모바일/좁은 화면: 제한 해제
+    return;
+  }
+  const titleBar = document.getElementById('titleBarText');
+  const footerBar = document.getElementById('footerBar');
+  const titleH = titleBar ? titleBar.getBoundingClientRect().height : 0;
+  const footerH = footerBar ? footerBar.getBoundingClientRect().height : 0;
+  const top = printArea.getBoundingClientRect().top;
+  const bottomGap = parseFloat(getComputedStyle(document.body).paddingBottom) || 16;
+  const printAreaMarginBottom = parseFloat(getComputedStyle(printArea).marginBottom) || 0;
+  const availableForCanvas = window.innerHeight - top - titleH - footerH - bottomGap - printAreaMarginBottom - 4;
+  if(availableForCanvas < 120) return; // 세로 공간이 너무 부족하면 축소를 포기(스크롤 허용)
+  const maxWidthForCanvas = Math.round(availableForCanvas / CANVAS_ASPECT_RATIO);
+  printArea.style.maxWidth = Math.max(320, maxWidthForCanvas) + 'px';
+}
+/* PC 화면에서 캔버스의 실제 표시 폭이 창 크기/모니터 해상도에 따라 달라져도 말풍선·장비 아이콘
+   크기와 위치가 항상 같은 비율로 보이도록, 고정 기준 폭(CANVAS_REF_WIDTH) 대비 실제 폭 비율만큼
+   #canvas 전체를 CSS transform:scale()로 축소·확대한다. (모바일은 제외 — 화면이 좁아 그대로
+   맞추면 글씨가 너무 작아짐) */
+const CANVAS_REF_WIDTH = 1200; // CSS의 #canvas width:1200px 값과 반드시 같아야 함
+function updateCanvasScale(){
+  if(!canvas || !canvasWrap) return;
+  if(window.innerWidth <= 760){
+    canvas.style.transform = ''; // 모바일: 배율 고정 없이 원래대로 캔버스를 그대로 채움
+    return;
+  }
+  const actualWidth = canvasWrap.clientWidth;
+  if(!actualWidth) return;
+  canvas.style.transform = `scale(${actualWidth / CANVAS_REF_WIDTH})`;
+}
+let _fitCanvasTimer = null;
+function scheduleFitCanvas(delay){
+  clearTimeout(_fitCanvasTimer);
+  _fitCanvasTimer = setTimeout(()=>{ relocateToolbars(); fitCanvasToViewport(); updateCanvasScale(); }, delay || 60);
+}
+window.addEventListener('resize', ()=>scheduleFitCanvas(60));
+window.addEventListener('load', ()=>scheduleFitCanvas(0));
+
 /* ---------------- 초기화 ---------------- */
 (function init(){
   document.getElementById('workDate').value = state.date;
@@ -2400,6 +2576,9 @@ async function exportImage(){
     refreshHistorySelect();
     renderCanvas();
   }
+  relocateToolbars();
+  fitCanvasToViewport();
+  updateCanvasScale();
 })();
 </script>
 </body>
