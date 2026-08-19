@@ -504,6 +504,24 @@ function bindTempPointerDrag(moveFn, upFn){
   document.addEventListener('pointerup', onUp);
   document.addEventListener('pointercancel', onCancel);
 }
+
+/* 모바일 대응: 더블클릭(dblclick) 대체 감지.
+   터치 기반 pointerdown에서 e.preventDefault()를 호출하면(드래그 구현을 위해 필요) 브라우저가
+   그 이후의 click/dblclick 합성 이벤트를 아예 발생시키지 않는 경우가 많다. 그 결과 데스크톱
+   마우스에서는 더블클릭으로 글자 입력 모드 전환이 잘 되는데, 스마트폰 터치에서는 아무리 빠르게
+   두 번 눌러도 편집모드로 안 바뀌는 문제가 생긴다. 이를 보완하기 위해 pointerdown 타이밍/좌표를
+   직접 비교해 "더블탭"을 감지한다. (마우스는 기존 dblclick이 정상 동작하므로 건드리지 않음) */
+const _dblTapState = new Map();
+function checkAndConsumeDoubleTap(key, x, y, maxDelayMs, maxDistPx){
+  const now = Date.now();
+  const prev = _dblTapState.get(key);
+  if(prev && (now - prev.t) <= maxDelayMs && Math.abs(x - prev.x) <= maxDistPx && Math.abs(y - prev.y) <= maxDistPx){
+    _dblTapState.delete(key);
+    return true;
+  }
+  _dblTapState.set(key, {t: now, x, y});
+  return false;
+}
 let uidSeq = 1;
 let selectedId = null;
 let selectTimer = null;
@@ -1716,8 +1734,7 @@ function buildBubbleEl(obj){
     el.appendChild(panel);
   }
 
-  textEl.addEventListener('dblclick', (e)=>{
-    e.stopPropagation();
+  function enterBubbleTextEdit(){
     textEl.contentEditable = true;
     el.classList.add('editing');
     clearTimeout(selectTimer); // 편집 중에는 자동 숨김 타이머 정지
@@ -1727,9 +1744,19 @@ function buildBubbleEl(obj){
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
+  }
+  textEl.addEventListener('dblclick', (e)=>{
+    e.stopPropagation();
+    enterBubbleTextEdit();
   });
   textEl.addEventListener('pointerdown', (e)=>{
-    if(textEl.contentEditable === 'true') e.stopPropagation(); // 편집 중엔 드래그로 오인되지 않게
+    if(textEl.contentEditable === 'true'){ e.stopPropagation(); return; } // 편집 중엔 드래그로 오인되지 않게
+    // 모바일 터치는 dblclick이 발생하지 않는 경우가 많아 더블탭을 직접 감지해서 편집모드로 전환
+    if(e.pointerType !== 'mouse' && checkAndConsumeDoubleTap('bubbleText:'+obj.id, e.clientX, e.clientY, 400, 25)){
+      e.stopPropagation();
+      e.preventDefault();
+      enterBubbleTextEdit();
+    }
   });
   textEl.addEventListener('blur', ()=>{
     textEl.contentEditable = false;
@@ -1837,8 +1864,7 @@ function buildEquipEl(obj){
   }
 
   labelDiv.title = '더블클릭하면 이름 수정 · 드래그하면 이름표만 따로 이동';
-  labelDiv.addEventListener('dblclick', (e)=>{
-    e.stopPropagation();
+  function enterLabelEdit(){
     labelDiv.contentEditable = true;
     el.classList.add('editing');
     clearTimeout(selectTimer);
@@ -1848,6 +1874,10 @@ function buildEquipEl(obj){
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
+  }
+  labelDiv.addEventListener('dblclick', (e)=>{
+    e.stopPropagation();
+    enterLabelEdit();
   });
   labelDiv.addEventListener('blur', ()=>{
     labelDiv.contentEditable = false;
@@ -1863,6 +1893,11 @@ function buildEquipEl(obj){
     if(labelDiv.contentEditable === 'true') return;
     e.stopPropagation();
     e.preventDefault();
+    // 모바일 터치는 dblclick이 발생하지 않는 경우가 많아 더블탭을 직접 감지해서 편집모드로 전환
+    if(e.pointerType !== 'mouse' && checkAndConsumeDoubleTap('label:'+obj.id, e.clientX, e.clientY, 400, 25)){
+      enterLabelEdit();
+      return;
+    }
     try{ labelDiv.setPointerCapture(e.pointerId); }catch(err){}
     const startX = e.clientX, startY = e.clientY;
     const startDx = obj.labelDx, startDy = obj.labelDy;
@@ -1892,24 +1927,27 @@ function buildEquipEl(obj){
   el.ondblclick = (e)=>{
     if(el.classList.contains('editing')) return; // 이름 수정 중이면 아이콘 변경 실행 안 함
     e.stopPropagation();
-    const wantPhoto = confirm(`"${obj.name}" 아이콘을 사진 파일로 첨부할까요?\n(취소를 누르면 이모지 텍스트로 입력합니다)`);
-    if(wantPhoto){
-      pickIconFile(async (dataURL)=>{
-        obj.icon = await uploadIconIfNeeded(dataURL);
-        renderCanvas();
-        if(FIREBASE_ENABLED) writeObjectRemote(obj);
-      });
-      return;
-    }
-    const newIcon = prompt(`"${obj.name}" 아이콘(이모지)을 입력하세요`, isImageIcon(obj.icon) ? '🔧' : obj.icon);
-    if(newIcon){
-      obj.icon = newIcon;
-      renderCanvas();
-      if(FIREBASE_ENABLED) writeObjectRemote(obj);
-    }
+    changeEquipIcon(obj);
   };
   attachDrag(el, obj);
   return el;
+}
+function changeEquipIcon(obj){
+  const wantPhoto = confirm(`"${obj.name}" 아이콘을 사진 파일로 첨부할까요?\n(취소를 누르면 이모지 텍스트로 입력합니다)`);
+  if(wantPhoto){
+    pickIconFile(async (dataURL)=>{
+      obj.icon = await uploadIconIfNeeded(dataURL);
+      renderCanvas();
+      if(FIREBASE_ENABLED) writeObjectRemote(obj);
+    });
+    return;
+  }
+  const newIcon = prompt(`"${obj.name}" 아이콘(이모지)을 입력하세요`, isImageIcon(obj.icon) ? '🔧' : obj.icon);
+  if(newIcon){
+    obj.icon = newIcon;
+    renderCanvas();
+    if(FIREBASE_ENABLED) writeObjectRemote(obj);
+  }
 }
 
 /* ---------------- 드래그 이동 (delta 기반, document 리스너로 안정성 확보) ---------------- */
@@ -1922,6 +1960,8 @@ function attachDrag(el, obj){
     const rect = canvasWrap.getBoundingClientRect();
     dragCtx = {
       el, obj, rect,
+      downTarget: e.target,
+      pointerType: e.pointerType,
       startClientX: e.clientX,
       startClientY: e.clientY,
       startXPct: obj.x,
@@ -1952,7 +1992,7 @@ function onDragMove(e){
   el.style.top = yPct + '%';
 }
 
-function onDragEnd(){
+function onDragEnd(e){
   if(dragCtx){
     dragCtx.el.style.cursor = 'grab';
     dragCtx.el.style.zIndex = '';
@@ -1963,7 +2003,17 @@ function onDragEnd(){
       writeObjectRemote(obj);
     }
     if(!moved && !dragCtx.el.classList.contains('editing')){
-      selectObject(obj.id); // 드래그 없이 클릭만 했으면 컨트롤(투명도/크기조절) 표시
+      // 모바일 터치는 아이콘을 더블클릭해도 dblclick이 발생하지 않는 경우가 많아
+      // 더블탭을 직접 감지해서 사진/이모지 변경 기능으로 연결
+      const cx = (e && typeof e.clientX === 'number') ? e.clientX : dragCtx.startClientX;
+      const cy = (e && typeof e.clientY === 'number') ? e.clientY : dragCtx.startClientY;
+      if(obj.type === 'equip' && dragCtx.pointerType !== 'mouse' &&
+         dragCtx.downTarget && dragCtx.downTarget.closest && dragCtx.downTarget.closest('.icon') &&
+         checkAndConsumeDoubleTap('equipIcon:'+obj.id, cx, cy, 400, 25)){
+        changeEquipIcon(obj);
+      } else {
+        selectObject(obj.id); // 드래그 없이 클릭만 했으면 컨트롤(투명도/크기조절) 표시
+      }
     }
   }
   dragCtx = null;
