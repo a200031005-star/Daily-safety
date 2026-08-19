@@ -16,7 +16,7 @@
   *{box-sizing:border-box;}
   body{
     font-family:'Noto Sans KR', Arial, sans-serif; margin:0; padding:16px;
-    background:var(--bg); color:#222;
+    background:var(--bg); color:#222; -webkit-tap-highlight-color:transparent;
   }
   h1{font-size:18px; margin:0;}
   .toolbar{
@@ -52,13 +52,15 @@
   #canvasWrap{
     position:relative; width:100%; padding-top:62%; background:#dfe6e2;
     background-size:cover; background-position:center; overflow:hidden;
+    touch-action:none; /* 모바일: 캔버스 안에서는 화면 스크롤/확대 대신 드래그가 우선되도록 */
   }
   #lineLayer{
     position:absolute; inset:0; width:100%; height:100%; pointer-events:none;
   }
   #canvas{
-    position:absolute; inset:0;
+    position:absolute; inset:0; touch-action:none;
   }
+  input[type=range]{ touch-action:manipulation; } /* 슬라이더는 원래대로 터치 드래그 가능하게 유지 */
   #lineModeBtn.active-line-mode, #zoneRectBtn.active-line-mode, #zoneCircleBtn.active-line-mode{
     background:var(--blue); border-color:var(--blue);
   }
@@ -83,63 +85,82 @@
     position:absolute; min-width:70px; max-width:450px; background:#ffffcc;
     border:2px solid var(--red); border-radius:10px; padding:8px 20px 8px 8px;
     font-size:12.5px; line-height:1.4; cursor:grab; user-select:none;
-    box-shadow:1px 2px 4px rgba(0,0,0,.15);
+    box-shadow:1px 2px 4px rgba(0,0,0,.15); touch-action:none;
+    -webkit-touch-callout:none; -webkit-user-select:none;
   }
-  .bubble.editing{cursor:text; outline:2px solid var(--blue); user-select:text;}
+  .bubble.editing{cursor:text; outline:2px solid var(--blue); user-select:text; touch-action:auto;}
   .bubble.selected{box-shadow:0 0 0 2px var(--blue), 1px 2px 4px rgba(0,0,0,.15);}
   .bubble b{display:block; font-size:12.5px; margin-bottom:2px;}
   .bubble-text{display:block; white-space:pre-wrap; word-break:break-word;}
   .bubble-textwrap{display:block;}
 
   .equip{
-    position:absolute; cursor:grab; user-select:none;
+    position:absolute; cursor:grab; user-select:none; touch-action:none;
+    -webkit-touch-callout:none;
   }
   .equip .label{
     position:absolute; left:0; top:-28px; transform:translate(-50%,-50%);
     background:#fff; border:2px solid var(--red); border-radius:6px;
     padding:3px 6px; font-size:11px; font-weight:bold; white-space:nowrap;
-    box-shadow:1px 1px 3px rgba(0,0,0,.2); cursor:grab; z-index:3;
+    box-shadow:1px 1px 3px rgba(0,0,0,.2); cursor:grab; z-index:3; touch-action:none;
+    -webkit-touch-callout:none; -webkit-user-select:none; user-select:none;
   }
   .equip.selected .label{box-shadow:0 0 0 2px var(--blue), 1px 1px 3px rgba(0,0,0,.2);}
-  .equip.editing .label{outline:2px solid var(--blue); cursor:text; user-select:text; white-space:normal;}
+  .equip.editing .label{outline:2px solid var(--blue); cursor:text; user-select:text; white-space:normal; touch-action:auto;}
   .equip .icon{
     position:absolute; left:0; top:0; transform:translate(-50%,-50%);
     font-size:26px; display:flex; align-items:center; justify-content:center;
+    -webkit-touch-callout:none;
   }
+  .equip .icon img{ -webkit-user-drag:none; -webkit-touch-callout:none; }
   .equip .icon-content{
     filter:drop-shadow(1px 1px 1px rgba(0,0,0,.3)); display:flex;
     transition:transform .12s ease;
   }
   .icon-controls{ position:absolute; inset:0; pointer-events:none; z-index:6; }
   .icon-ctrl-btn{
-    position:absolute; width:18px; height:18px; border-radius:50%;
-    background:var(--green); color:#fff; font-size:11px; display:flex;
+    position:absolute; width:22px; height:22px; border-radius:50%;
+    background:var(--green); color:#fff; font-size:12px; display:flex;
     align-items:center; justify-content:center; border:1px solid #fff;
     cursor:pointer; box-shadow:1px 1px 3px rgba(0,0,0,.3); pointer-events:auto;
+    touch-action:none; -webkit-touch-callout:none;
   }
-  .icon-ctrl-btn.ictrl-top{ top:-9px; left:-9px; }
-  .icon-ctrl-btn.ictrl-mid{ top:50%; left:-13px; transform:translateY(-50%); }
-  .icon-ctrl-btn.ictrl-bottom{ bottom:-9px; left:-9px; }
+  .icon-ctrl-btn.ictrl-top{ top:-11px; left:-11px; }
+  .icon-ctrl-btn.ictrl-mid{ top:50%; left:-15px; transform:translateY(-50%); }
+  .icon-ctrl-btn.ictrl-bottom{ bottom:-11px; left:-11px; }
 
   .del-btn{
-    position:absolute; top:-8px; right:-8px; width:18px; height:18px; border-radius:50%;
-    background:var(--red); color:#fff; border:1px solid #fff; font-size:11px; line-height:1;
+    position:absolute; top:-10px; right:-10px; width:22px; height:22px; border-radius:50%;
+    background:var(--red); color:#fff; border:1px solid #fff; font-size:13px; line-height:1;
     display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;
-    z-index:5;
+    z-index:5; touch-action:none; -webkit-touch-callout:none;
   }
   .op-slider{
-    position:absolute; top:-11px; left:-4px; width:54px; height:14px; margin:0;
+    position:absolute; top:-14px; left:-4px; width:58px; height:18px; margin:0;
     cursor:pointer; accent-color:var(--blue);
   }
   .resize-handle{
-    position:absolute; right:-8px; bottom:-8px; width:15px; height:15px;
-    background:var(--purple); border:2px solid #fff; border-radius:3px;
+    position:absolute; right:-10px; bottom:-10px; width:20px; height:20px;
+    background:var(--purple); border:2px solid #fff; border-radius:4px;
     cursor:nwse-resize; box-shadow:1px 1px 3px rgba(0,0,0,.35); z-index:6;
+    touch-action:none; -webkit-touch-callout:none;
   }
   .style-btn{
-    width:18px; height:18px; border-radius:50%;
-    background:var(--blue); color:#fff; font-size:10px; display:flex; align-items:center;
+    width:22px; height:22px; border-radius:50%;
+    background:var(--blue); color:#fff; font-size:12px; display:flex; align-items:center;
     justify-content:center; border:1px solid #fff; cursor:pointer; z-index:6;
+    touch-action:none; -webkit-touch-callout:none;
+  }
+  @media (pointer:coarse){
+    /* 스마트폰 등 손가락 터치 환경에서는 작은 버튼·손잡이·이름표를 조금 더 크게 만들어
+       정확히 붙잡기 쉽게 함 (겉모습은 동일, 터치 영역만 확장) */
+    .equip .label{ padding:6px 10px; font-size:12.5px; }
+    .resize-handle{ width:26px; height:26px; right:-13px; bottom:-13px; }
+    .del-btn{ width:26px; height:26px; top:-13px; right:-13px; font-size:15px; }
+    .icon-ctrl-btn{ width:26px; height:26px; font-size:13px; }
+    .icon-ctrl-btn.ictrl-top{ top:-13px; left:-13px; }
+    .icon-ctrl-btn.ictrl-mid{ left:-17px; }
+    .icon-ctrl-btn.ictrl-bottom{ bottom:-13px; left:-13px; }
   }
   .marker-controls{
     position:absolute; top:4px; left:8px;
@@ -153,6 +174,9 @@
     z-index:20; display:flex; flex-direction:column; gap:6px; cursor:default;
   }
   .style-panel-marker{ top:34px; } /* marker-controls(삭제·색상 버튼) 아래로 내려서 겹치지 않게 */
+  /* 말풍선 크기조절(리사이즈) 손잡이가 말풍선 아래로 10px 튀어나와 있어서, 패널을 그보다 더
+     아래로 내려 겹치지 않게 함 (겹치면 손잡이를 눌렀는데 패널이 클릭을 가로채는 문제 발생) */
+  .style-panel-bubble{ margin-top:20px; }
   .swatch-row{ display:flex; gap:5px; justify-content:center; }
   .swatch{
     width:18px; height:18px; border-radius:50%; cursor:pointer; border:2px solid transparent;
@@ -463,6 +487,23 @@ let state = {
   objects: [] // {id,type:'bubble'|'equip'|'line'|'zone', text, name, icon, x, y}
 };
 let dragCtx = null;
+/* 모바일 대응 공용 헬퍼: pointermove/pointerup 뿐 아니라 pointercancel까지 반드시 함께 정리해야 함.
+   (스마트폰에서는 길게 누르기 콜아웃, 화면 가장자리 제스처 등으로 pointerup 없이 pointercancel만
+   발생하는 경우가 흔한데, 이걸 안 받아주면 드래그 리스너가 계속 남아있어 다음 터치가 엉뚱하게
+   움직이거나 "이동이 안 되는" 것처럼 보이는 현상이 생김) */
+function bindTempPointerDrag(moveFn, upFn){
+  function cleanup(ev){
+    document.removeEventListener('pointermove', moveFn);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onCancel);
+    upFn(ev);
+  }
+  function onUp(ev){ cleanup(ev); }
+  function onCancel(ev){ cleanup(ev); }
+  document.addEventListener('pointermove', moveFn);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onCancel);
+}
 let uidSeq = 1;
 let selectedId = null;
 let selectTimer = null;
@@ -568,13 +609,10 @@ function buildResizeHandleEl(obj, iconContentDiv){
       resetSelectTimer();
     }
     function up(){
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
       if(FIREBASE_ENABLED) writeObjectRemote(obj);
       resetSelectTimer();
     }
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
+    bindTempPointerDrag(move, up);
   });
   return handle;
 }
@@ -604,13 +642,10 @@ function buildBubbleResizeHandleEl(obj, bubbleEl){
       resetSelectTimer();
     }
     function up(){
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
       if(FIREBASE_ENABLED) writeObjectRemote(obj);
       resetSelectTimer();
     }
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
+    bindTempPointerDrag(move, up);
   });
   return handle;
 }
@@ -675,8 +710,6 @@ canvas.addEventListener('pointerdown', (e)=>{
     renderLineLayer();
   }
   function up(){
-    document.removeEventListener('pointermove', move);
-    document.removeEventListener('pointerup', up);
     draggingLocally.delete(hit.id);
     if(moved){
       if(FIREBASE_ENABLED) writeObjectRemote(hit);
@@ -686,8 +719,7 @@ canvas.addEventListener('pointerdown', (e)=>{
       selectObject(hit.id);
     }
   }
-  document.addEventListener('pointermove', move);
-  document.addEventListener('pointerup', up);
+  bindTempPointerDrag(move, up);
 });
 canvasWrap.addEventListener('pointerdown', (e)=>{
   if(!zoneMode) return;
@@ -705,12 +737,9 @@ canvasWrap.addEventListener('pointerdown', (e)=>{
     renderZoneDraftPreview();
   }
   function up(){
-    document.removeEventListener('pointermove', move);
-    document.removeEventListener('pointerup', up);
     finishZone();
   }
-  document.addEventListener('pointermove', move);
-  document.addEventListener('pointerup', up);
+  bindTempPointerDrag(move, up);
 });
 document.addEventListener('keydown', (e)=>{
   if(e.key === 'Escape'){
@@ -913,7 +942,7 @@ function buildLineMarker(obj){
    variant='marker'면 선/구역 마커(삭제·색상 버튼) 아래쪽에 겹치지 않게 배치 */
 function buildStylePanelEl(obj, onChangeVisual, variant, bubbleTextEl){
   const panel = document.createElement('div');
-  panel.className = 'style-panel' + (variant === 'marker' ? ' style-panel-marker' : '');
+  panel.className = 'style-panel' + (variant === 'marker' ? ' style-panel-marker' : (variant === 'bubble' ? ' style-panel-bubble' : ''));
   panel.addEventListener('pointerdown', (e)=> e.stopPropagation());
   panel.addEventListener('click', (e)=> e.stopPropagation());
 
@@ -1361,7 +1390,7 @@ function isImageIcon(icon){
 function iconHTML(icon, size){
   if(isImageIcon(icon)){
     // object-fit:contain + 배경 없음 → PNG 투명 배경이 그대로 보임(잘림/배경색 없음)
-    return `<img src="${icon}" style="width:${size}px;height:${size}px;object-fit:contain;display:block;background:transparent;">`;
+    return `<img src="${icon}" draggable="false" style="width:${size}px;height:${size}px;object-fit:contain;display:block;background:transparent;-webkit-user-drag:none;">`;
   }
   return `<span style="font-size:${size}px;line-height:1;">${icon}</span>`;
 }
@@ -1834,9 +1863,11 @@ function buildEquipEl(obj){
     if(labelDiv.contentEditable === 'true') return;
     e.stopPropagation();
     e.preventDefault();
+    try{ labelDiv.setPointerCapture(e.pointerId); }catch(err){}
     const startX = e.clientX, startY = e.clientY;
     const startDx = obj.labelDx, startDy = obj.labelDy;
     let moved = false;
+    draggingLocally.add(obj.id); // 드래그 중엔 원격(Firebase) 갱신이 위치를 되돌리지 못하게 잠금
     function move(ev){
       const dx = ev.clientX - startX, dy = ev.clientY - startY;
       if(Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
@@ -1846,16 +1877,15 @@ function buildEquipEl(obj){
       labelDiv.style.top = obj.labelDy + 'px';
     }
     function up(){
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
+      try{ labelDiv.releasePointerCapture(e.pointerId); }catch(err){}
+      draggingLocally.delete(obj.id);
       if(moved){
         if(FIREBASE_ENABLED) writeObjectRemote(obj);
       } else {
         selectObject(obj.id);
       }
     }
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
+    bindTempPointerDrag(move, up);
   });
 
   el.title = '클릭하면 크기조절·회전·반전·삭제 버튼 표시(약 3초 후 자동 숨김) · 더블클릭(이름)은 이름 수정, 더블클릭(그림)은 아이콘 사진/이모지 수정';
