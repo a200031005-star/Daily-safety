@@ -14,9 +14,11 @@
     --red:#c0392b; --purple:#7b2fbe; --blue:#1a5cad;
   }
   *{box-sizing:border-box;}
+  html, body{ height:100%; }
   body{
-    font-family:'Noto Sans KR', Arial, sans-serif; margin:0; padding:16px;
+    font-family:'Noto Sans KR', Arial, sans-serif; margin:0; padding:10px;
     background:var(--bg); color:#222; -webkit-tap-highlight-color:transparent;
+    height:100vh; height:100dvh; overflow:hidden; display:flex; flex-direction:column;
   }
   h1{font-size:18px; margin:0;}
   .toolbar{
@@ -44,48 +46,37 @@
 
   #printArea{
     background:#fff; border-radius:6px; overflow:hidden; position:relative;
-    box-shadow:0 2px 8px rgba(0,0,0,.12); margin-bottom:14px;
+    box-shadow:0 2px 8px rgba(0,0,0,.12);
+    display:flex; flex-direction:column; flex:1; min-height:0;
   }
   #titleBarText{
     background:var(--green); color:#fff; padding:10px 16px; font-size:18px; font-weight:bold;
+    flex-shrink:0;
   }
   #canvasWrap{
-    position:relative; width:100%; padding-top:62%; background:#dfe6e2;
-    background-size:cover; background-position:center; overflow:hidden;
+    position:relative; flex:1; min-height:0; background:#dfe6e2;
+    background-size:contain; background-position:center; background-repeat:no-repeat;
+    overflow:hidden;
     touch-action:none; /* 모바일: 캔버스 안에서는 화면 스크롤/확대 대신 드래그가 우선되도록 */
+  }
+  #stage{
+    position:absolute; left:0; top:0; width:1600px; height:992px; transform-origin:top left;
   }
   #lineLayer{
     position:absolute; inset:0; width:100%; height:100%; pointer-events:none;
   }
-  /* 화면 폭(모니터·창 크기·모바일 기기)이 달라져도 말풍선·장비 아이콘의 크기와 위치가 항상
-     똑같은 비율로 보이도록, PC·모바일 구분 없이 "고정 기준 해상도"(1200×744) 위에 그린 뒤
-     JS(updateCanvasScale)가 transform:scale()로 실제 표시 폭에 맞게 통째로 축소/확대한다.
-     위치(%)는 물론 아이콘 크기·글자 크기 같은 px 값도 화면 크기와 무관하게 항상 같은 비율로 유지됨. */
   #canvas{
-    position:absolute; touch-action:none;
-    inset:auto; top:0; left:0;
-    width:1200px; height:744px; /* 초기 기본값(깜빡임 방지). 실제 값은 JS(updateCanvasScale)가 항상 최신으로 갱신 */
-    transform-origin:top left;
+    position:absolute; inset:0;
+    touch-action:none;
   }
   input[type=range]{ touch-action:manipulation; } /* 슬라이더는 원래대로 터치 드래그 가능하게 유지 */
   #lineModeBtn.active-line-mode, #zoneRectBtn.active-line-mode, #zoneCircleBtn.active-line-mode{
     background:var(--blue); border-color:var(--blue);
   }
-  #headPanel{
-    overflow:hidden; max-height:80px; transition:max-height .2s ease, opacity .2s ease, margin .2s ease, padding .2s ease;
-  }
-  #headPanel.collapsed{
-    max-height:0; opacity:0; margin-bottom:0; padding-top:0; padding-bottom:0; border:none;
-  }
-  #savePanel{
-    overflow:hidden; max-height:80px; transition:max-height .2s ease, opacity .2s ease, margin .2s ease, padding .2s ease;
-  }
-  #savePanel.collapsed{
-    max-height:0; opacity:0; margin-bottom:0; padding-top:0; padding-bottom:0; border:none;
-  }
   #zoneRectBtn, #zoneCircleBtn{ font-size:14px; padding:5px 9px; }
   #footerBar{
     background:var(--green); color:#fff; padding:8px 16px; font-size:16px; font-weight:bold;
+    flex-shrink:0;
   }
 
   .bubble{
@@ -114,20 +105,6 @@
   }
   .equip.selected .label{box-shadow:0 0 0 2px var(--blue), 1px 1px 3px rgba(0,0,0,.2);}
   .equip.editing .label{outline:2px solid var(--blue); cursor:text; user-select:text; white-space:normal; touch-action:auto;}
-
-  /* 공동 작업: 다른 참여자가 지금 편집 중인 항목 표식(테두리 점멸). 내 자신이 선택한 항목에는 붙지 않음. */
-  .remote-editing:not(.equip){ outline:3px dashed #2ecc71; outline-offset:3px; animation:remoteEditPulse 1.1s ease-in-out infinite; }
-  .equip.remote-editing .icon{ outline:3px dashed #2ecc71; outline-offset:4px; border-radius:50%; animation:remoteEditPulse 1.1s ease-in-out infinite; }
-  .equip.remote-editing .label{ outline:3px dashed #2ecc71; outline-offset:2px; animation:remoteEditPulse 1.1s ease-in-out infinite; }
-  @keyframes remoteEditPulse{ 0%,100%{ outline-color:#2ecc71; } 50%{ outline-color:#d6f7e2; } }
-  /* "수정중" 안내 배지 - 점선 테두리 위쪽에 떠서 지금 누가 편집 중인지 글자로도 알려줌 */
-  .remote-editing:not(.equip)::after,
-  .equip.remote-editing .label::after{
-    content:'수정중'; position:absolute; left:50%; top:-11px; transform:translate(-50%,-100%);
-    background:#2ecc71; color:#fff; font-size:10px; font-weight:bold; line-height:1;
-    padding:3px 7px; border-radius:10px; white-space:nowrap; z-index:60; pointer-events:none;
-    box-shadow:1px 1px 3px rgba(0,0,0,.25);
-  }
   .equip .icon{
     position:absolute; left:0; top:0; transform:translate(-50%,-50%);
     font-size:26px; display:flex; align-items:center; justify-content:center;
@@ -198,17 +175,6 @@
   /* 말풍선 크기조절(리사이즈) 손잡이가 말풍선 아래로 10px 튀어나와 있어서, 패널을 그보다 더
      아래로 내려 겹치지 않게 함 (겹치면 손잡이를 눌렀는데 패널이 클릭을 가로채는 문제 발생) */
   .style-panel-bubble{ margin-top:20px; }
-  /* 말풍선/마커가 배경(캔버스) 아래쪽 가장자리에 가까워서 패널이 아래로 열리면 화면 밖으로
-     잘리거나 하단 바(footer)와 겹치는 경우, JS(adjustStylePanelPosition)가 이 클래스를 붙여서
-     빈 공간이 있는 옆쪽(오른쪽 우선, 안되면 왼쪽)으로 패널을 옮겨 연다. */
-  .style-panel-side-right{
-    top:0 !important; left:100% !important; margin-top:0 !important; margin-left:10px !important;
-    transform:none !important;
-  }
-  .style-panel-side-left{
-    top:0 !important; left:auto !important; right:100% !important;
-    margin-top:0 !important; margin-right:10px !important; transform:none !important;
-  }
   .swatch-row{ display:flex; gap:5px; justify-content:center; }
   .swatch{
     width:18px; height:18px; border-radius:50%; cursor:pointer; border:2px solid transparent;
@@ -254,56 +220,6 @@
     align-items:center; justify-content:center; border:1px solid #fff; cursor:pointer; z-index:5;
   }
 
-  #appBody{display:flex; gap:14px; align-items:flex-start;}
-  #leftCol{flex:1; min-width:0;}
-  #rightCol{
-    width:460px; flex-shrink:0;
-    display:flex; flex-direction:row; align-items:flex-start; gap:12px;
-    position:sticky; top:14px;
-    max-height:calc(100vh - 36px); overflow-y:auto;
-  }
-  #rightCol h3{font-size:13px; margin:0 0 8px; color:var(--green); text-align:center;}
-
-  /* PC 화면: 상단에 있던 헤드·저장·출력·말풍선/선/구역 메뉴들을 우측 빈 공간으로 옮기고,
-     "설정"(#sidebarToolsSlot)과 "장비 추가"(#equipSection) 두 영역을 나란히 2열로 분리해서
-     한눈에 구분되게 한다 (JS relocateToolbars 참고). 배경(캔버스)이 시작되는 위치도 위로 당겨져
-     화면을 더 크게 쓸 수 있다. */
-  #sidebarToolsSlot, #equipSection{
-    background:#fff; border:1px solid #ddd; border-radius:8px; padding:10px;
-    flex:1 1 0; min-width:0;
-  }
-  #sidebarToolsSlot:empty{ display:none; padding:0; border:none; flex:0 0 0; } /* 모바일: 원래 자리로 돌아가 비어있을 때 */
-  /* 세로 간격은 각 .toolbar 자체의 margin-bottom(기본 10px, 접혔을 때는 0)에 맡긴다.
-     부모에 gap을 쓰면, 헤드·저장 패널이 접혀 높이가 0이 되어도 gap이 그대로 남아
-     "빈 공간"이 생기는 문제가 있었음 → gap 대신 margin-bottom만 사용해서 접힌 패널은
-     실제로 자리를 차지하지 않게 함 */
-  #sidebarToolsSlot{ display:flex; flex-direction:column; }
-  #sidebarToolsSlot .toolbar{
-    background:none; border:none; border-radius:0; padding:0;
-    flex-direction:column; align-items:stretch; gap:8px; min-width:0;
-  }
-  #sidebarToolsSlot .toolbar:not(.collapsed):not(:last-child){
-    border-bottom:1px solid #eee; padding-bottom:10px;
-  }
-  /* min-width:0 필수: flex 자식은 기본적으로 min-width:auto라 내용(특히 <input type=date>의
-     기본 최소 폭) 때문에 부모보다 넓어져 옆 칸(장비추가 카드) 쪽으로 넘치는 문제가 있었음 */
-  #sidebarToolsSlot .toolbar .group{
-    border-right:none; padding-right:0; margin-right:0; flex-wrap:wrap; min-width:0; width:100%;
-    border-bottom:1px solid #eee; padding-bottom:8px;
-  }
-  #sidebarToolsSlot .toolbar .group:last-child{ border-bottom:none; padding-bottom:0; }
-  #sidebarToolsSlot button{ width:100%; justify-content:center; }
-  /* 헤드·저장 패널의 원래 max-height:80px는 가로로 넓게 한 줄(원래 상단 툴바) 기준으로 잡힌 값이라,
-     좁은 열 안에서 입력칸들이 줄바꿈되면 내용이 잘리거나, 둘 다 펼쳤을 때 아래쪽이 잘리는 문제가
-     있었음 → 사이드바 안에서는 충분히 큰 값으로 늘려서 (헤드+저장 동시에 펼쳐도) 잘리지 않게 함 */
-  /* :not(.collapsed)로 한정해야 함 — 안 그러면 이 규칙의 특이도(ID 2개)가 기존
-     "#headPanel.collapsed{max-height:0}"(ID 1개+클래스 1개)보다 높아서 접힘 자체가 무시돼버림 */
-  #sidebarToolsSlot #headPanel:not(.collapsed), #sidebarToolsSlot #savePanel:not(.collapsed){ max-height:400px; }
-  #sidebarToolsSlot select{ width:100%; }
-  #sidebarToolsSlot input[type=text]{ width:100%; }
-  #siteNameInput{ width:180px; } /* 사이드바 밖(모바일 등)에서의 기본 폭 — 사이드바 안에서는 위 규칙(width:100%)이 우선 적용됨 */
-
-  #eqPalette{display:flex; flex-direction:column; gap:8px;}
   .eq-chip{
     display:flex; flex-direction:column; align-items:center; gap:2px; background:#fff;
     border:2px solid var(--red); color:#222; border-radius:8px; padding:6px 4px;
@@ -332,9 +248,7 @@
   #syncBadge .dot{width:7px; height:7px; border-radius:50%; background:currentColor;}
 
   @media (max-width:760px){
-    #appBody{flex-direction:column;}
-    #rightCol{width:100%; position:static; max-height:none; overflow-y:visible; flex-direction:column;}
-    #eqPalette{flex-direction:row; flex-wrap:wrap;}
+    #eqPalette{flex-direction:row; flex-wrap:wrap; max-height:none;}
     .eq-chip{width:70px;}
   }
 
@@ -343,9 +257,6 @@
     stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;
   }
   .icn-only{margin-right:0;}
-  #helpBtn{
-    margin-left:auto; background:#fff; color:var(--green); border:1px solid var(--green);
-  }
   .dropdown-menu{
     display:none; position:absolute; top:100%; left:0; margin-top:5px;
     background:#fff; border:1px solid #ccc; border-radius:8px; padding:8px;
@@ -368,6 +279,62 @@
   #helpModalBox ul{margin:0; padding-left:18px;}
   #helpModalBox .close-help{
     display:block; margin:18px auto 0; padding:8px 20px;
+  }
+
+  /* ---------------- 좌/우 아이콘 레일 + 펼침 패널(Lightroom 스타일) ---------------- */
+  #appBody{ display:flex; align-items:stretch; gap:10px; flex:1; min-height:0; }
+  .side-rail{
+    display:flex; flex-direction:column; gap:6px; align-items:center; justify-content:flex-start;
+    background:#fff; border:1px solid #ddd; border-radius:8px; padding:6px;
+    flex-shrink:0; overflow-y:auto;
+  }
+  .rail-btn{
+    width:30px; height:30px; padding:0; display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--green); background:#fff; color:var(--green); border-radius:7px; cursor:pointer;
+    flex-shrink:0;
+  }
+  .rail-btn .icn{ margin:0; width:15px; height:15px; }
+  .rail-btn.active{ background:var(--green); color:#fff; }
+  .rail-sep{ width:20px; height:1px; background:#e2e2e2; margin:2px 0; flex-shrink:0; }
+
+  #stageWrap{ position:relative; flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; }
+
+  .flyout-panel{
+    position:absolute; top:0; width:250px; max-height:100%; overflow:auto;
+    background:rgba(255,255,255,.72); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.5); border-radius:10px; box-shadow:0 8px 26px rgba(0,0,0,.25);
+    padding:14px; z-index:40; display:flex; flex-direction:column; gap:12px;
+    opacity:0; pointer-events:none; transition:transform .22s ease, opacity .18s ease;
+  }
+  .flyout-panel.open{ opacity:1; pointer-events:auto; }
+  .flyout-panel.side-right{ right:0; transform:translateX(115%); }
+  .flyout-panel.side-right.open{ transform:translateX(2px); }
+  .flyout-title{ font-size:13px; font-weight:bold; color:var(--green); margin:0 0 2px; border-bottom:1px solid rgba(0,0,0,.1); padding-bottom:6px; }
+  .flyout-row{ display:flex; flex-direction:column; gap:4px; }
+  .flyout-row label{ font-size:11.5px; color:#555; }
+  .flyout-row input[type=text], .flyout-row input[type=date], .flyout-row input[type=file], .flyout-row select{
+    width:100%;
+  }
+  .flyout-panel button{ width:100%; justify-content:flex-start; display:flex; align-items:center; }
+
+  #eqPalette{display:flex; flex-direction:column; gap:8px; max-height:46vh; overflow:auto;}
+
+  @media (max-width:760px){
+    .rail-btn{ width:26px; height:26px; border-radius:6px; }
+    .rail-btn .icn{ width:13px; height:13px; }
+    .side-rail{ gap:4px; padding:4px; }
+    .flyout-panel{ width:78vw; max-width:270px; }
+  }
+
+  /* 모바일 세로(portrait) 모드에서는 버튼 레일을 캔버스 상단으로 이동 */
+  @media (max-width:760px) and (orientation:portrait){
+    #appBody{ flex-direction:column; align-items:stretch; min-height:0; }
+    #stageWrap{ width:100%; min-height:0; }
+    .side-rail{
+      order:-1; flex-direction:row; flex-wrap:wrap; justify-content:center;
+      width:100%; position:static; top:auto; flex-shrink:0; max-height:none; overflow:visible;
+    }
+    .rail-sep{ width:1px; height:18px; margin:0 3px; }
   }
 </style>
 </head>
@@ -431,135 +398,156 @@
   3) 저장 후 다시 열면 이 안내는 사라지고, 여러 명이 같은 파일(URL)로 접속 시 실시간으로 동기화됩니다.
 </div>
 
-<div class="toolbar" id="topToolbarRow1">
-  <div class="group">
-    <button class="secondary" id="headToggleBtn" onclick="toggleHeadPanel()">
-      <svg class="icn" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="18" r="2"/></svg>헤드·배경 설정
-      <svg class="icn icn-only" id="headChevron" viewBox="0 0 24 24" style="margin-left:4px; transition:transform .2s;"><polyline points="6 9 12 15 18 9"/></svg>
-    </button>
-  </div>
-  <div class="group">
-    <button class="secondary" id="saveToggleBtn" onclick="toggleSavePanel()">
-      <svg class="icn" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>저장·계획
-      <svg class="icn icn-only" id="saveChevron" viewBox="0 0 24 24" style="margin-left:4px; transition:transform .2s; transform:rotate(-90deg);"><polyline points="6 9 12 15 18 9"/></svg>
-    </button>
-  </div>
-  <div class="group" style="position:relative;">
-    <button class="gold" id="exportToggleBtn" onclick="toggleExportMenu()">
-      <svg class="icn" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>출력
-      <svg class="icn icn-only" viewBox="0 0 24 24" style="margin-left:4px;"><polyline points="6 9 12 15 18 9"/></svg>
-    </button>
-    <div id="exportMenu" class="dropdown-menu">
-      <button class="secondary" style="width:100%; justify-content:flex-start;" onclick="exportPDF(); closeExportMenu();">
-        <svg class="icn" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="18" x2="13" y2="18"/></svg>PDF로 저장
-      </button>
-      <button class="secondary" style="width:100%; justify-content:flex-start; margin-top:5px;" onclick="exportImage(); closeExportMenu();">
-        <svg class="icn" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>사진(PNG)으로 저장
-      </button>
-    </div>
-  </div>
-  <div class="group" style="border-right:none;">
-    <span id="syncBadge" class="off"><span class="dot"></span><span id="syncBadgeText">로컬 저장 모드</span></span>
-  </div>
-  <button id="helpBtn" onclick="openHelp()">
-    <svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>사용법
-  </button>
-</div>
-
-<div class="toolbar collapsed" id="savePanel">
-  <div class="group">
-    <button class="secondary" onclick="savePlan()">
-      <svg class="icn" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>저장
-    </button>
-    <button class="secondary" onclick="saveAsNewDate()" title="위쪽 '작업일' 칸에서 새 날짜를 선택한 뒤 누르면, 지금 내용을 그 날짜로 별도 저장합니다 (원본 날짜는 유지됨)">
-      <svg class="icn" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><line x1="12" y1="4" x2="12" y2="8"/><line x1="10" y1="6" x2="14" y2="6"/></svg>다른 날짜로 저장
-    </button>
-    <button class="secondary" onclick="newPlan()">
-      <svg class="icn" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>새 계획
-    </button>
-    <select id="histSelect" onchange="onHistSelect()" style="max-width:150px;"></select>
-    <button class="danger" onclick="deleteCurrentPlan()">
-      <svg class="icn" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>이력 삭제
-    </button>
-  </div>
-</div>
-
-<div class="toolbar" id="headPanel">
-  <div class="group">
-    <label>현장명</label>
-    <input type="text" id="siteNameInput" value="" placeholder="현장명을 입력하세요">
-    <label>작업일</label>
-    <input type="date" id="workDate">
-    <button onclick="applyHeader()">헤드 적용</button>
-  </div>
-  <div class="group" style="border-right:none;">
-    <label>배경</label>
-    <input type="file" id="bgUpload" accept="image/*">
-    <button class="danger" onclick="removeBackground()">
-      <svg class="icn" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>배경 삭제
-    </button>
-  </div>
-</div>
-
-<div id="topToolsAnchor"></div>
 <div id="appBody">
-  <div id="leftCol">
-    <div id="canvasToolsAnchor"></div>
-    <div class="toolbar" id="canvasToolsRow">
-      <div class="group">
-        <button onclick="addBubble()">
-          <svg class="icn" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 12.5 3h.5a8.5 8.5 0 0 1 8 8.5z"/></svg>작업 말풍선 추가
-        </button>
-      </div>
-      <div class="group">
-        <button id="lineModeBtn" onclick="toggleLineMode()">
-          <svg class="icn" viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><line x1="14" y1="5" x2="18" y2="9"/></svg><span id="lineModeBtnLabel">선 추가</span>
-        </button>
-        <button class="danger" id="lineCancelBtn" onclick="cancelLineDraft()" style="display:none;">
-          <svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>선 취소
-        </button>
-      </div>
-      <div class="group" style="border-right:none;">
-        <label>구역설정</label>
-        <button id="zoneRectBtn" onclick="toggleZoneMode('rect')" title="드래그해서 사각형 구역 그리기">
-          <svg class="icn icn-only" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/></svg>
-        </button>
-        <button id="zoneCircleBtn" onclick="toggleZoneMode('circle')" title="드래그해서 원형 구역 그리기">
-          <svg class="icn icn-only" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
-        </button>
-      </div>
-    </div>
-
+  <div id="stageWrap">
     <div id="printArea">
       <div id="titleBarText">명일작업현황</div>
-      <div id="presenceBox" style="position:absolute; top:8px; right:16px; color:#fff; font-size:12px; background:rgba(0,0,0,.25); padding:3px 9px; border-radius:10px; display:none;">👥 <span id="presenceCount">0</span>명 접속 중</div>
+      <div id="statusBox" style="position:absolute; top:8px; right:16px; display:flex; align-items:center; gap:6px;">
+        <span id="syncBadge" class="off"><span class="dot"></span><span id="syncBadgeText">로컬 저장 모드</span></span>
+        <div id="presenceBox" style="color:#fff; font-size:12px; background:rgba(0,0,0,.25); padding:3px 9px; border-radius:10px; display:none;">👥 <span id="presenceCount">0</span>명 접속 중</div>
+      </div>
       <div id="canvasWrap">
-        <svg id="lineLayer" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
-        <div id="canvas"></div>
+        <div id="stage">
+          <svg id="lineLayer" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+          <div id="canvas"></div>
+        </div>
       </div>
       <div id="footerBar">영통푸르지오파인베르현장</div>
     </div>
-  </div>
 
-  <div id="rightCol">
-    <div id="sidebarToolsSlot"></div>
-    <div id="equipSection">
-      <h3><svg class="icn" viewBox="0 0 24 24" style="width:16px;height:16px;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"/></svg> 장비 추가</h3>
+    <!-- 오른쪽에서 펼쳐지는 패널들: 헤드·저장·출력 + 말풍선/선/구역/장비 등, 모두 우측으로 통합 -->
+    <div class="flyout-panel side-right" id="panel-head">
+      <div class="flyout-title">헤드·배경 설정</div>
+      <div class="flyout-row">
+        <label>헤드 문구</label>
+        <input type="text" id="titleTextInput" value="명일작업현황" placeholder="예: 명일작업현황">
+      </div>
+      <div class="flyout-row">
+        <label>현장명</label>
+        <input type="text" id="siteNameInput" value="" placeholder="현장명을 입력하세요">
+      </div>
+      <div class="flyout-row">
+        <label>작업일</label>
+        <input type="date" id="workDate">
+      </div>
+      <button onclick="applyHeader()">헤드 적용</button>
+      <div class="flyout-row" style="margin-top:6px; border-top:1px solid rgba(0,0,0,.1); padding-top:10px;">
+        <label>배경 사진</label>
+        <input type="file" id="bgUpload" accept="image/*">
+      </div>
+      <button class="danger" onclick="removeBackground()">
+        <svg class="icn" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>배경 삭제
+      </button>
+    </div>
+
+    <div class="flyout-panel side-right" id="panel-save">
+      <div class="flyout-title">저장·계획</div>
+      <button class="secondary" onclick="savePlan()">
+        <svg class="icn" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>저장
+      </button>
+      <button class="secondary" onclick="saveAsNewDate()" title="위쪽 '작업일' 칸에서 새 날짜를 선택한 뒤 누르면, 지금 내용을 그 날짜로 별도 저장합니다 (원본 날짜는 유지됨)">
+        <svg class="icn" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><line x1="12" y1="4" x2="12" y2="8"/><line x1="10" y1="6" x2="14" y2="6"/></svg>다른 날짜로 저장
+      </button>
+      <button class="secondary" onclick="newPlan()">
+        <svg class="icn" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>새 계획
+      </button>
+      <div class="flyout-row">
+        <label>이력 불러오기</label>
+        <select id="histSelect" onchange="onHistSelect()"></select>
+      </div>
+      <button class="danger" onclick="deleteCurrentPlan()">
+        <svg class="icn" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>이력 삭제
+      </button>
+    </div>
+
+    <div class="flyout-panel side-right" id="panel-export">
+      <div class="flyout-title">출력</div>
+      <button class="gold" onclick="exportPDF(); toggleFlyout('panel-export');">
+        <svg class="icn" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="18" x2="13" y2="18"/></svg>PDF로 저장
+      </button>
+      <button class="gold" onclick="exportImage(); toggleFlyout('panel-export');">
+        <svg class="icn" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>사진(PNG)으로 저장
+      </button>
+    </div>
+
+    <div class="flyout-panel side-right" id="panel-bubble">
+      <div class="flyout-title">작업 말풍선</div>
+      <button onclick="addBubble(); toggleFlyout('panel-bubble');">
+        <svg class="icn" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 12.5 3h.5a8.5 8.5 0 0 1 8 8.5z"/></svg>말풍선 추가
+      </button>
+    </div>
+
+    <div class="flyout-panel side-right" id="panel-line">
+      <div class="flyout-title">선 추가</div>
+      <button id="lineModeBtn" onclick="toggleLineMode()">
+        <svg class="icn" viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><line x1="14" y1="5" x2="18" y2="9"/></svg><span id="lineModeBtnLabel">선 추가</span>
+      </button>
+      <button class="danger" id="lineCancelBtn" onclick="cancelLineDraft()" style="display:none;">
+        <svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>선 취소
+      </button>
+    </div>
+
+    <div class="flyout-panel side-right" id="panel-zone">
+      <div class="flyout-title">구역설정</div>
+      <button id="zoneRectBtn" onclick="toggleZoneMode('rect')" title="드래그해서 사각형 구역 그리기">
+        <svg class="icn" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/></svg>사각형 구역
+      </button>
+      <button id="zoneCircleBtn" onclick="toggleZoneMode('circle')" title="드래그해서 원형 구역 그리기">
+        <svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>원형 구역
+      </button>
+    </div>
+
+    <div class="flyout-panel side-right" id="panel-equip">
+      <div class="flyout-title"><svg class="icn" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"/></svg>장비 추가</div>
       <div id="eqPalette"></div>
-      <button class="secondary" style="width:100%; margin-top:10px;" onclick="addCustomEquipType()">
+      <button class="secondary" onclick="addCustomEquipType()">
         <svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>장비 종류 추가
       </button>
-      <button class="danger" style="width:100%; margin-top:6px;" onclick="resetEquipTypes()">
+      <button class="danger" onclick="resetEquipTypes()">
         <svg class="icn" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>장비 초기화
       </button>
     </div>
   </div>
+
+  <!-- 우측 레일: 헤드/저장/출력 + 말풍선/선/구역/장비 모두 우측에 통합 배치 -->
+  <div class="side-rail" id="rightRail">
+    <button class="rail-btn" onclick="openHelp()" title="사용법">
+      <svg class="icn icn-only" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </button>
+    <div class="rail-sep"></div>
+    <button class="rail-btn" data-panel="panel-head" onclick="toggleFlyout('panel-head')" title="헤드·배경 설정">
+      <svg class="icn icn-only" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="18" r="2"/></svg>
+    </button>
+    <button class="rail-btn" data-panel="panel-save" onclick="toggleFlyout('panel-save')" title="저장·계획">
+      <svg class="icn icn-only" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+    </button>
+    <button class="rail-btn" data-panel="panel-export" onclick="toggleFlyout('panel-export')" title="출력(PDF/사진)">
+      <svg class="icn icn-only" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+    <div class="rail-sep"></div>
+
+    <button class="rail-btn" data-panel="panel-bubble" onclick="toggleFlyout('panel-bubble')" title="말풍선 추가">
+      <svg class="icn icn-only" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8A8.5 8.5 0 0 1 12.5 3h.5a8.5 8.5 0 0 1 8 8.5z"/></svg>
+    </button>
+    <button class="rail-btn" data-panel="panel-line" onclick="toggleFlyout('panel-line')" title="선 추가">
+      <svg class="icn icn-only" viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><line x1="14" y1="5" x2="18" y2="9"/></svg>
+    </button>
+    <button class="rail-btn" data-panel="panel-zone" onclick="toggleFlyout('panel-zone')" title="구역설정">
+      <svg class="icn icn-only" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/></svg>
+    </button>
+    <div class="rail-sep"></div>
+    <button class="rail-btn" data-panel="panel-equip" onclick="toggleFlyout('panel-equip')" title="장비 추가">
+      <svg class="icn icn-only" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"/></svg>
+    </button>
+  </div>
 </div>
+
 
 <script>
 /* ---------------- 상태 ---------------- */
 let state = {
   siteName: '',
+  titleText: '명일작업현황',
   date: todayStr(),
   bgDataURL: null,
   objects: [] // {id,type:'bubble'|'equip'|'line'|'zone', text, name, icon, x, y}
@@ -610,7 +598,6 @@ function selectObject(id){
   const prev = selectedId;
   selectedId = id;
   updateSelectionUI(prev, id);
-  beginRemoteEdit(id); // 선택(편집 패널이 열림) = 이 항목을 편집 중으로 다른 참여자에게 표시
   resetSelectTimer();
 }
 function deselectObject(){
@@ -619,7 +606,6 @@ function deselectObject(){
   selectedId = null;
   clearTimeout(selectTimer);
   updateSelectionUI(prev, null);
-  endRemoteEdit();
 }
 function resetSelectTimer(){
   clearTimeout(selectTimer);
@@ -627,32 +613,10 @@ function resetSelectTimer(){
     const prev = selectedId;
     selectedId = null;
     updateSelectionUI(prev, null);
-    endRemoteEdit();
   }, SELECT_HIDE_MS);
 }
 /* 선택 변경 시 캔버스를 통째로 다시 그리지 않고, 컨트롤(슬라이더/리사이즈 핸들)만 붙였다 뗀다.
    (통째로 다시 그리면 더블클릭 텍스트 편집 인식이 끊길 수 있어 이렇게 처리) */
-/* 말풍선/마커 스타일 패널(선 특성 선택 등)이 기본값(아래쪽)으로 열렸을 때 캔버스(배경) 아래
-   가장자리를 벗어나 잘리거나 하단 바와 겹치면, 오른쪽 빈 공간으로 옮기고(그래도 부족하면 왼쪽)
-   위치를 자동 보정한다. */
-function adjustStylePanelPosition(panel, hostEl){
-  if(!panel || !hostEl || !canvasWrap) return;
-  panel.classList.remove('style-panel-side-right', 'style-panel-side-left');
-  const wrapRect = canvasWrap.getBoundingClientRect();
-  let panelRect = panel.getBoundingClientRect();
-  if(panelRect.bottom <= wrapRect.bottom - 4) return; // 아래쪽에 자리가 충분하면 기존 방식 유지
-  panel.classList.add('style-panel-side-right');
-  panelRect = panel.getBoundingClientRect();
-  if(panelRect.right > wrapRect.right - 4){
-    panel.classList.remove('style-panel-side-right');
-    panel.classList.add('style-panel-side-left');
-    panelRect = panel.getBoundingClientRect();
-    if(panelRect.left < wrapRect.left + 4){
-      // 양옆도 다 부족한 극단적인 경우: 옆으로 옮겨도 소용없으니 기본(아래쪽) 배치로 되돌림
-      panel.classList.remove('style-panel-side-left');
-    }
-  }
-}
 function updateSelectionUI(prevId, newId){
   if(prevId){
     const prevEl = canvas.querySelector(`[data-oid="${prevId}"]`);
@@ -676,14 +640,10 @@ function updateSelectionUI(prevId, newId){
         newEl.appendChild(buildDeleteBtn(obj));
         newEl.appendChild(buildOpacitySliderEl(obj, newEl));
         newEl.appendChild(buildBubbleResizeHandleEl(obj, newEl));
-        const bubblePanel = buildStylePanelEl(obj, ()=>{ applyBubbleStyle(newEl, obj); }, 'bubble', textEl);
-        newEl.appendChild(bubblePanel);
-        adjustStylePanelPosition(bubblePanel, newEl);
+        newEl.appendChild(buildStylePanelEl(obj, ()=>{ applyBubbleStyle(newEl, obj); }, 'bubble', textEl));
       } else if(obj.type === 'line' || obj.type === 'zone'){
         newEl.appendChild(buildMarkerControlsEl(obj));
-        const markerPanel = buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker');
-        newEl.appendChild(markerPanel);
-        adjustStylePanelPosition(markerPanel, newEl);
+        newEl.appendChild(buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker'));
       } else { // equip
         const iconContentDiv = newEl.querySelector('.icon-content');
         const iconWrap = newEl.querySelector('.icon');
@@ -727,7 +687,8 @@ function buildResizeHandleEl(obj, iconContentDiv){
     resetSelectTimer();
     const startX = e.clientX, startY = e.clientY, startSize = obj.size;
     function move(ev){
-      const delta = Math.max(ev.clientX - startX, ev.clientY - startY);
+      const scale = getStageScale();
+      const delta = Math.max(ev.clientX - startX, ev.clientY - startY) / scale;
       obj.size = Math.max(16, Math.min(120, Math.round(startSize + delta)));
       iconContentDiv.innerHTML = iconHTML(obj.icon, obj.size);
       resetSelectTimer();
@@ -752,11 +713,13 @@ function buildBubbleResizeHandleEl(obj, bubbleEl){
     const startX = e.clientX;
     const startY = e.clientY;
     const rect = bubbleEl.getBoundingClientRect();
-    const startWidth = obj.boxWidth || rect.width;
-    const startHeight = obj.boxHeight || rect.height;
+    const startScale = getStageScale();
+    const startWidth = obj.boxWidth || (rect.width / startScale);
+    const startHeight = obj.boxHeight || (rect.height / startScale);
     function move(ev){
-      const deltaX = ev.clientX - startX;
-      const deltaY = ev.clientY - startY;
+      const scale = getStageScale();
+      const deltaX = (ev.clientX - startX) / scale;
+      const deltaY = (ev.clientY - startY) / scale;
       obj.boxWidth = Math.max(70, Math.min(420, Math.round(startWidth + deltaX)));
       obj.boxHeight = Math.max(30, Math.min(600, Math.round(startHeight + deltaY)));
       bubbleEl.style.width = obj.boxWidth + 'px';
@@ -776,6 +739,38 @@ function buildBubbleResizeHandleEl(obj, bubbleEl){
 
 const canvas = document.getElementById('canvas');
 const canvasWrap = document.getElementById('canvasWrap');
+const stage = document.getElementById('stage');
+
+/* ---------------- 캔버스 반응형 스케일 ----------------
+   #stage(내부에 lineLayer+canvas)는 항상 1600x992(px) 고정 좌표계로 그려지고,
+   실제 화면(canvasWrap)에 보여줄 때는 "화면 안에 통째로 들어가도록"(contain 방식) 비율을 계산해
+   transform: translate+scale로 축소/확대하고 중앙에 배치한다.
+   이렇게 하면 화면 크기·가로세로 모드가 바뀌어도 말풍선·장비·글자 크기가 서로 같은 비율로
+   함께 커지고 작아지며, 캔버스 전체가 항상 화면 안에 스크롤 없이 들어온다. */
+const CANVAS_BASE_W = 1600;
+const CANVAS_BASE_H = 992;
+function getStageScale(){
+  const w = canvasWrap.getBoundingClientRect().width;
+  const h = canvasWrap.getBoundingClientRect().height;
+  if(!w || !h) return 1;
+  return Math.min(w / CANVAS_BASE_W, h / CANVAS_BASE_H) || 1;
+}
+function updateCanvasScale(){
+  const w = canvasWrap.getBoundingClientRect().width;
+  const h = canvasWrap.getBoundingClientRect().height;
+  if(!w || !h) return;
+  const scale = getStageScale();
+  const offsetX = (w - CANVAS_BASE_W * scale) / 2;
+  const offsetY = (h - CANVAS_BASE_H * scale) / 2;
+  stage.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+}
+window.addEventListener('resize', updateCanvasScale);
+window.addEventListener('orientationchange', ()=>setTimeout(updateCanvasScale, 200));
+if(window.ResizeObserver){
+  new ResizeObserver(updateCanvasScale).observe(canvasWrap);
+}
+updateCanvasScale();
+
 const lineLayer = document.getElementById('lineLayer');
 const SVG_NS = 'http://www.w3.org/2000/svg';
 let lineMode = false;
@@ -806,7 +801,7 @@ canvas.addEventListener('dblclick', (e)=>{
 canvas.addEventListener('pointerdown', (e)=>{
   if(lineMode || zoneMode) return;
   if(e.target !== canvas) return; // 말풍선/장비 등은 자체 드래그 로직이 처리
-  const rect = canvasWrap.getBoundingClientRect();
+  const rect = stage.getBoundingClientRect();
   const px = ((e.clientX - rect.left) / rect.width) * 100;
   const py = ((e.clientY - rect.top) / rect.height) * 100;
   const hit = findShapeAt(px, py);
@@ -849,7 +844,7 @@ canvasWrap.addEventListener('pointerdown', (e)=>{
   if(!zoneMode) return;
   if(e.target.closest && e.target.closest('.del-btn')) return;
   e.preventDefault();
-  const rect = canvasWrap.getBoundingClientRect();
+  const rect = stage.getBoundingClientRect();
   const sx = Math.max(0, Math.min(100, ((e.clientX-rect.left)/rect.width)*100));
   const sy = Math.max(0, Math.min(100, ((e.clientY-rect.top)/rect.height)*100));
   zoneDraft = { shape: zoneMode, x1:sx, y1:sy, x2:sx, y2:sy };
@@ -906,7 +901,7 @@ function exitLineMode(){
   clearDraftPreview();
 }
 function addLinePoint(e){
-  const rect = canvasWrap.getBoundingClientRect();
+  const rect = stage.getBoundingClientRect();
   const xPct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
   const yPct = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
   draftLine.points.push({x: xPct, y: yPct});
@@ -1058,9 +1053,7 @@ function buildLineMarker(obj){
 
   if(obj.id === selectedId){
     wrap.appendChild(buildMarkerControlsEl(obj));
-    const markerPanel = buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker');
-    wrap.appendChild(markerPanel);
-    adjustStylePanelPosition(markerPanel, wrap);
+    wrap.appendChild(buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker'));
   }
   return wrap;
 }
@@ -1551,16 +1544,6 @@ let planRef = null, planListener = null;
 let presenceRef = null;
 const draggingLocally = new Set(); // 드래그 중인 객체 id는 원격 갱신을 잠시 무시
 
-/* ---------------- 공동작업: "다른 사람이 편집 중" 표식 ----------------
-   여러 명이 같은 계획을 동시에 열어볼 때, 지금 누군가 드래그·크기조절·이름/글자 수정 중인
-   항목을 다른 참여자 화면에도 시각적으로(테두리 표시) 알려주기 위한 상태.
-   editing/{date}/{objId} = {clientId, ts} 형태로 실시간 공유하고, 내 clientId와 다른 항목만
-   "다른 사람이 편집 중"으로 표시한다. */
-const myClientId = 'c_' + Math.random().toString(36).slice(2) + '_' + Date.now().toString(36);
-let editingRef = null, editingListener = null;
-let myEditingRef = null, myEditingObjId = null;
-let remoteEditing = {}; // {objId: {clientId, ts}} - 나 자신은 제외됨
-
 if(FIREBASE_ENABLED){
   firebase.initializeApp(firebaseConfig);
   fbDb = firebase.database();
@@ -1774,7 +1757,6 @@ function renderCanvas(){
     else canvas.appendChild(buildEquipEl(obj));
   });
   if(draftLine) renderDraftPreview(); // 원격 갱신 등으로 재렌더되어도 그리던 선은 유지
-  applyRemoteEditingMarkers(); // DOM을 새로 그렸으므로 "다른 사람이 편집 중" 표식도 다시 붙여준다
 }
 
 function buildDeleteBtn(obj){
@@ -1851,7 +1833,6 @@ function buildBubbleEl(obj){
     el.appendChild(buildBubbleResizeHandleEl(obj, el));
     const panel = buildStylePanelEl(obj, ()=>{ applyBubbleStyle(el, obj); }, 'bubble', textEl);
     el.appendChild(panel);
-    adjustStylePanelPosition(panel, el);
   }
 
   function enterBubbleTextEdit(){
@@ -2023,7 +2004,6 @@ function buildEquipEl(obj){
     const startDx = obj.labelDx, startDy = obj.labelDy;
     let moved = false;
     draggingLocally.add(obj.id); // 드래그 중엔 원격(Firebase) 갱신이 위치를 되돌리지 못하게 잠금
-    beginRemoteEdit(obj.id);
     function move(ev){
       const dx = ev.clientX - startX, dy = ev.clientY - startY;
       if(Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
@@ -2037,7 +2017,6 @@ function buildEquipEl(obj){
       draggingLocally.delete(obj.id);
       if(moved){
         if(FIREBASE_ENABLED) writeObjectRemote(obj);
-        endRemoteEdit();
       } else {
         selectObject(obj.id);
       }
@@ -2079,7 +2058,7 @@ function attachDrag(el, obj){
     e.preventDefault();
     e.stopPropagation();
 
-    const rect = canvasWrap.getBoundingClientRect();
+    const rect = stage.getBoundingClientRect();
     dragCtx = {
       el, obj, rect,
       downTarget: e.target,
@@ -2093,7 +2072,6 @@ function attachDrag(el, obj){
     el.style.cursor = 'grabbing';
     el.style.zIndex = 50;
     draggingLocally.add(obj.id);
-    beginRemoteEdit(obj.id);
 
     document.addEventListener('pointermove', onDragMove);
     document.addEventListener('pointerup', onDragEnd);
@@ -2124,9 +2102,6 @@ function onDragEnd(e){
     draggingLocally.delete(obj.id);
     if(FIREBASE_ENABLED && moved){
       writeObjectRemote(obj);
-    }
-    if(moved){
-      endRemoteEdit();
     }
     if(!moved && !dragCtx.el.classList.contains('editing')){
       // 모바일 터치는 아이콘을 더블클릭해도 dblclick이 발생하지 않는 경우가 많아
@@ -2204,6 +2179,7 @@ function carriedBgFor(date){
 function applyHeader(){
   const newDate = document.getElementById('workDate').value || todayStr();
   state.siteName = document.getElementById('siteNameInput').value; // 공란 허용
+  state.titleText = document.getElementById('titleTextInput').value.trim() || '명일작업현황';
   if(FIREBASE_ENABLED && newDate !== state.date){
     state.date = newDate;
     subscribeToDate(state.date);
@@ -2211,40 +2187,42 @@ function applyHeader(){
   }
   state.date = newDate;
   updateHeaderDisplay();
-  if(FIREBASE_ENABLED) fbDb.ref(`plans/${state.date}/siteName`).set(state.siteName);
+  if(FIREBASE_ENABLED){
+    fbDb.ref(`plans/${state.date}/siteName`).set(state.siteName);
+    fbDb.ref(`plans/${state.date}/titleText`).set(state.titleText);
+  }
 }
 function updateHeaderDisplay(){
-  document.getElementById('titleBarText').innerText = `명일작업현황 [${state.date}]`;
+  document.getElementById('titleBarText').innerText = `${state.titleText} [${state.date}]`;
   document.getElementById('footerBar').innerText = state.siteName;
   document.getElementById('siteNameInput').value = state.siteName;
+  document.getElementById('titleTextInput').value = state.titleText;
   document.getElementById('workDate').value = state.date;
 }
-function toggleHeadPanel(){
-  const panel = document.getElementById('headPanel');
-  const collapsed = panel.classList.toggle('collapsed');
-  const chevron = document.getElementById('headChevron');
-  if(chevron) chevron.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
-  scheduleFitCanvas(220); // 패널 접힘/펼침 트랜지션(0.2s) 끝난 뒤 남는 세로 공간 다시 계산
+/* 좌/우 아이콘 레일을 누르면 해당 패널이 펼쳐지고(open), 다시 누르거나 다른 아이콘을 누르면 접힘.
+   태블릿 사진 참고 UI처럼 한 번에 하나의 패널만 펼쳐지도록 함(같은 패널을 다시 누르면 닫힘). */
+function toggleFlyout(panelId){
+  const target = document.getElementById(panelId);
+  if(!target) return;
+  const willOpen = !target.classList.contains('open');
+  document.querySelectorAll('.flyout-panel.open').forEach(p=>p.classList.remove('open'));
+  document.querySelectorAll('.rail-btn.active').forEach(b=>b.classList.remove('active'));
+  if(willOpen){
+    target.classList.add('open');
+    const btn = document.querySelector(`.rail-btn[data-panel="${panelId}"]`);
+    if(btn) btn.classList.add('active');
+  }
 }
-function toggleSavePanel(){
-  const panel = document.getElementById('savePanel');
-  const collapsed = panel.classList.toggle('collapsed');
-  const chevron = document.getElementById('saveChevron');
-  if(chevron) chevron.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
-  scheduleFitCanvas(220);
-}
-function toggleExportMenu(){
-  document.getElementById('exportMenu').classList.toggle('open');
-}
-function closeExportMenu(){
-  document.getElementById('exportMenu').classList.remove('open');
+function closeAllFlyouts(){
+  document.querySelectorAll('.flyout-panel.open').forEach(p=>p.classList.remove('open'));
+  document.querySelectorAll('.rail-btn.active').forEach(b=>b.classList.remove('active'));
 }
 document.addEventListener('click', (e)=>{
-  const menu = document.getElementById('exportMenu');
-  const btn = document.getElementById('exportToggleBtn');
-  if(menu && menu.classList.contains('open') && !menu.contains(e.target) && e.target !== btn && !btn.contains(e.target)){
-    menu.classList.remove('open');
-  }
+  const openPanel = document.querySelector('.flyout-panel.open');
+  if(!openPanel) return;
+  if(openPanel.contains(e.target)) return;
+  if(e.target.closest && e.target.closest('.rail-btn')) return; // 레일 버튼 클릭은 toggleFlyout이 자체 처리
+  closeAllFlyouts();
 });
 function openHelp(){
   document.getElementById('helpModal').classList.add('open');
@@ -2253,7 +2231,7 @@ function closeHelp(){
   document.getElementById('helpModal').classList.remove('open');
 }
 document.addEventListener('keydown', (e)=>{
-  if(e.key === 'Escape') { closeHelp(); closeExportMenu(); }
+  if(e.key === 'Escape') { closeHelp(); closeAllFlyouts(); }
 });
 function resetEquipTypes(){
   if(!confirm('장비 팔레트를 기본 목록으로 초기화할까요?\n(직접 추가/수정한 장비 종류는 사라집니다. 이미 캔버스에 배치된 장비는 영향 없습니다)')) return;
@@ -2276,13 +2254,13 @@ function removeObjectRemote(id){
 
 /* Firebase 모드: 날짜(plans/날짜) 노드를 실시간 구독 */
 function subscribeToDate(date){
-  endRemoteEdit(); // 날짜를 바꾸면 이전 날짜에 남긴 "편집 중" 표식을 정리
   if(planListener) planRef.off('value', planListener);
   planRef = fbDb.ref(`plans/${date}`);
   planListener = planRef.on('value', (snap)=>{
     const val = snap.val() || {};
     state.date = date;
     state.siteName = val.siteName || state.siteName;
+    state.titleText = val.titleText || state.titleText || '명일작업현황';
     if(val.bgURL){
       state.bgDataURL = val.bgURL;
       lastBgDataURL = val.bgURL; lastBgDate = date; // 이 날짜 기준으로 갱신(더 이후 날짜로만 이어짐)
@@ -2305,7 +2283,6 @@ function subscribeToDate(date){
     renderCanvas();
   });
   subscribePresence(date);
-  subscribeEditingState(date);
   refreshHistorySelect();
 }
 
@@ -2322,66 +2299,17 @@ function subscribePresence(date){
   });
 }
 
-/* 지금 이 항목을 내가 편집 중이라고 실시간으로 표시(같은 계획을 보는 다른 참여자 화면에 반영됨).
-   같은 항목을 이미 표시 중이면 아무 것도 하지 않고, 다른 항목으로 바뀌면 이전 표식부터 지운다. */
-function beginRemoteEdit(objId){
-  if(!FIREBASE_ENABLED || !objId) return;
-  if(myEditingObjId === objId) return;
-  endRemoteEdit();
-  myEditingObjId = objId;
-  myEditingRef = fbDb.ref(`editing/${state.date}/${objId}`);
-  myEditingRef.set({clientId: myClientId, ts: Date.now()});
-  myEditingRef.onDisconnect().remove();
-}
-/* 내가 남긴 "편집 중" 표식을 지운다(선택 해제, 편집 종료, 날짜 전환, 접속 종료 시 호출). */
-function endRemoteEdit(){
-  if(myEditingRef){
-    try{ myEditingRef.onDisconnect().cancel(); }catch(err){}
-    myEditingRef.remove().catch(()=>{});
-  }
-  myEditingRef = null;
-  myEditingObjId = null;
-}
-/* editing/{date} 노드를 실시간 구독해서 "다른 사람이 지금 편집 중인 항목" 목록을 갱신한다. */
-function subscribeEditingState(date){
-  if(editingRef) editingRef.off('value', editingListener);
-  editingRef = fbDb.ref(`editing/${date}`);
-  editingListener = editingRef.on('value', (snap)=>{
-    const val = snap.val() || {};
-    remoteEditing = {};
-    Object.keys(val).forEach(objId=>{
-      const info = val[objId];
-      if(info && info.clientId && info.clientId !== myClientId){
-        remoteEditing[objId] = info;
-      }
-    });
-    applyRemoteEditingMarkers();
-  });
-}
-/* remoteEditing 상태를 실제 캔버스 DOM에 반영(테두리 표식 추가/제거). renderCanvas()로 DOM이
-   통째로 새로 만들어질 때마다 표식이 사라지므로, renderCanvas() 끝에서도 다시 호출해준다. */
-function applyRemoteEditingMarkers(){
-  if(!canvas) return;
-  canvas.querySelectorAll('.remote-editing').forEach(el=>{
-    const oid = el.getAttribute('data-oid');
-    if(!oid || !remoteEditing[oid]) el.classList.remove('remote-editing');
-  });
-  Object.keys(remoteEditing).forEach(objId=>{
-    const el = canvas.querySelector(`[data-oid="${objId}"]`);
-    if(el) el.classList.add('remote-editing');
-  });
-}
-
 function savePlan(){
   applyHeader();
   if(FIREBASE_ENABLED){
     // 실시간 모드에서는 입력할 때마다 이미 반영되지만, 명시적으로 한 번 더 확정 저장
     fbDb.ref(`plans/${state.date}/siteName`).set(state.siteName);
+    fbDb.ref(`plans/${state.date}/titleText`).set(state.titleText);
     fbDb.ref(`plans/${state.date}/date`).set(state.date);
     alert(`${state.date} 계획이 저장(동기화)되었습니다. 팀원 화면에도 실시간 반영됩니다.`);
     return;
   }
-  const record = { siteName: state.siteName, date: state.date, objects: state.objects };
+  const record = { siteName: state.siteName, titleText: state.titleText, date: state.date, objects: state.objects };
   let saveError = null;
   try{
     localStorage.setItem(PLAN_PREFIX + state.date, JSON.stringify(record));
@@ -2414,12 +2342,14 @@ function saveAsNewDate(){
   if(!confirm(`${targetDate} 날짜로 지금 화면 내용을 별도 저장할까요?\n(원본 ${state.date} 내용은 그대로 유지되고, ${targetDate}에 기존 내용이 있다면 덮어씁니다)`)) return;
 
   const siteName = document.getElementById('siteNameInput').value;
+  const titleText = document.getElementById('titleTextInput').value.trim() || '명일작업현황';
 
   if(FIREBASE_ENABLED){
     const objMap = {};
     state.objects.forEach(o=>{ objMap[o.id] = o; });
     fbDb.ref(`plans/${targetDate}`).set({
       siteName: siteName,
+      titleText: titleText,
       date: targetDate,
       bgURL: state.bgDataURL || null,
       objects: objMap
@@ -2432,7 +2362,7 @@ function saveAsNewDate(){
     return;
   }
 
-  const record = { siteName: siteName, date: targetDate, objects: state.objects };
+  const record = { siteName: siteName, titleText: titleText, date: targetDate, objects: state.objects };
   try{
     localStorage.setItem(PLAN_PREFIX + targetDate, JSON.stringify(record));
   }catch(e){
@@ -2446,6 +2376,7 @@ function saveAsNewDate(){
     idbDeleteBg(targetDate);
   }
   state.siteName = siteName;
+  state.titleText = titleText;
   state.date = targetDate;
   lastBgDataURL = state.bgDataURL || lastBgDataURL;
   updateHeaderDisplay();
@@ -2464,6 +2395,7 @@ async function loadPlan(date){
   if(!raw){ alert('저장된 계획이 없습니다.'); return; }
   const record = JSON.parse(raw);
   state.siteName = record.siteName;
+  state.titleText = record.titleText || '명일작업현황';
   state.date = record.date;
   state.objects = record.objects || [];
   const savedBg = await idbLoadBg(date);
@@ -2485,7 +2417,7 @@ function newPlan(){
     subscribeToDate(newDate);
     return;
   }
-  state = { siteName: state.siteName, date: newDate, bgDataURL: carriedBgFor(newDate), objects: [] };
+  state = { siteName: state.siteName, titleText: state.titleText, date: newDate, bgDataURL: carriedBgFor(newDate), objects: [] };
   updateHeaderDisplay();
   renderCanvas();
 }
@@ -2570,84 +2502,6 @@ async function exportImage(){
   document.body.removeChild(a);
 }
 
-/* ---------------- PC 화면 맞춤: 스크롤 없이 배경(캔버스)이 한 화면에 다 보이도록 자동 축소 ----------------
-   #canvasWrap은 padding-top:62%(너비 기준 세로/가로 비율)로 종횡비를 유지하는데, 이 비율을 그대로
-   둔 채 #printArea의 최대 너비만 화면에 남는 세로 공간에 맞춰 줄이면 스크롤 없이 전체가 보인다.
-   (좁은 화면/모바일은 기존처럼 전체 폭을 그대로 쓰고 스크롤을 허용한다 — 억지로 줄이면 글씨가 너무
-   작아져 오히려 사용성이 나빠짐) */
-/* PC 화면: 상단에 있던 헤드·저장·출력·말풍선/선/구역 메뉴들을 우측 사이드바 빈 공간으로 옮겨서
-   배경(캔버스)이 차지할 수 있는 세로 공간을 넓힌다. 좁은 화면(모바일)에서는 원래 위치로 되돌려
-   놓아 기존처럼 위→아래 순서로 조작할 수 있게 한다. (요소를 옮기기만 할 뿐, 버튼의 id·기능은
-   그대로라 동작에는 영향이 없음) */
-function relocateToolbars(){
-  const anchor1 = document.getElementById('topToolsAnchor');
-  const anchor2 = document.getElementById('canvasToolsAnchor');
-  const slot = document.getElementById('sidebarToolsSlot');
-  const row1 = document.getElementById('topToolbarRow1');
-  const headPanel = document.getElementById('headPanel');
-  const savePanel = document.getElementById('savePanel');
-  const canvasToolsRow = document.getElementById('canvasToolsRow');
-  if(!anchor1 || !anchor2 || !slot || !row1 || !headPanel || !savePanel || !canvasToolsRow) return;
-  const wide = window.innerWidth > 760;
-  const isRelocated = slot.contains(row1);
-  if(wide && !isRelocated){
-    slot.appendChild(row1);
-    slot.appendChild(headPanel);
-    slot.appendChild(savePanel);
-    slot.appendChild(canvasToolsRow);
-  } else if(!wide && isRelocated){
-    const topParent = anchor1.parentNode;
-    topParent.insertBefore(row1, anchor1);
-    topParent.insertBefore(savePanel, anchor1);
-    topParent.insertBefore(headPanel, anchor1);
-    anchor2.parentNode.insertBefore(canvasToolsRow, anchor2.nextSibling);
-  }
-}
-const CANVAS_ASPECT_RATIO = 0.62; // #canvasWrap { padding-top:62% } 과 반드시 같은 값 유지
-function fitCanvasToViewport(){
-  const printArea = document.getElementById('printArea');
-  if(!printArea) return;
-  if(window.innerWidth <= 760){
-    printArea.style.maxWidth = ''; // 모바일/좁은 화면: 제한 해제
-    return;
-  }
-  const titleBar = document.getElementById('titleBarText');
-  const footerBar = document.getElementById('footerBar');
-  const titleH = titleBar ? titleBar.getBoundingClientRect().height : 0;
-  const footerH = footerBar ? footerBar.getBoundingClientRect().height : 0;
-  const top = printArea.getBoundingClientRect().top;
-  const bottomGap = parseFloat(getComputedStyle(document.body).paddingBottom) || 16;
-  const printAreaMarginBottom = parseFloat(getComputedStyle(printArea).marginBottom) || 0;
-  const availableForCanvas = window.innerHeight - top - titleH - footerH - bottomGap - printAreaMarginBottom - 4;
-  if(availableForCanvas < 120) return; // 세로 공간이 너무 부족하면 축소를 포기(스크롤 허용)
-  const maxWidthForCanvas = Math.round(availableForCanvas / CANVAS_ASPECT_RATIO);
-  printArea.style.maxWidth = Math.max(320, maxWidthForCanvas) + 'px';
-}
-/* 캔버스의 실제 표시 폭이 창 크기/모니터 해상도는 물론 모바일 기기 화면 폭에 따라 달라져도
-   말풍선·장비 아이콘 크기와 "위치"가 항상 PC와 똑같은 비율로 보이도록, PC·모바일 구분 없이
-   동일한 기준 폭(CANVAS_REF_WIDTH)을 그대로 사용한다.
-   (한때 모바일에 더 작은 기준 폭을 따로 썼더니, 구역/말풍선 위치는 %로 고정인데 크기만
-   상대적으로 커져서 서로 겹치거나 화면 밖으로 잘리는 문제가 생겼다 — 위치와 크기가 항상
-   같은 비율 관계를 유지하려면 기준 폭이 하나로 통일되어야 한다. 대신 글자가 작아 보이는
-   문제는 브라우저 확대(핀치 줌)로 보완 가능하다.) */
-const CANVAS_REF_WIDTH = 1200; // CSS의 #canvas 기준 폭 - PC/모바일 공통
-function updateCanvasScale(){
-  if(!canvas || !canvasWrap) return;
-  const actualWidth = canvasWrap.clientWidth;
-  if(!actualWidth) return;
-  const refHeight = Math.round(CANVAS_REF_WIDTH * CANVAS_ASPECT_RATIO);
-  canvas.style.width = CANVAS_REF_WIDTH + 'px';
-  canvas.style.height = refHeight + 'px';
-  canvas.style.transform = `scale(${actualWidth / CANVAS_REF_WIDTH})`;
-}
-let _fitCanvasTimer = null;
-function scheduleFitCanvas(delay){
-  clearTimeout(_fitCanvasTimer);
-  _fitCanvasTimer = setTimeout(()=>{ relocateToolbars(); fitCanvasToViewport(); updateCanvasScale(); }, delay || 60);
-}
-window.addEventListener('resize', ()=>scheduleFitCanvas(60));
-window.addEventListener('load', ()=>scheduleFitCanvas(0));
-
 /* ---------------- 초기화 ---------------- */
 (function init(){
   document.getElementById('workDate').value = state.date;
@@ -2658,9 +2512,6 @@ window.addEventListener('load', ()=>scheduleFitCanvas(0));
     refreshHistorySelect();
     renderCanvas();
   }
-  relocateToolbars();
-  fitCanvasToViewport();
-  updateCanvasScale();
 })();
 </script>
 </body>
