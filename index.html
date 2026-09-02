@@ -189,6 +189,18 @@
     display:flex; gap:6px; z-index:20;
   }
   .marker-controls .del-btn{ position:static; top:auto; right:auto; }
+  /* 화살표 강조 도형의 회전 손잡이: 도형 중심(wrap 기준점) 둘레를 파란 원으로 표시,
+     JS가 left/top(px)을 각도에 맞춰 매번 갱신하므로 transform으로 그 점 위에 중앙 정렬만 한다 */
+  .rotate-handle{
+    position:absolute; width:24px; height:24px; border-radius:50%;
+    background:var(--blue); color:#fff; border:2px solid #fff;
+    display:flex; align-items:center; justify-content:center;
+    cursor:grab; box-shadow:1px 1px 4px rgba(0,0,0,.35); z-index:21;
+    touch-action:none; -webkit-touch-callout:none; transform:translate(-50%,-50%);
+  }
+  @media (pointer:coarse){
+    .rotate-handle{ width:30px; height:30px; }
+  }
   /* 말풍선 전용: 선특성·글자특성·복사 아이콘을 말풍선 "바깥" 왼쪽에 세로로 배치
      (말풍선 안쪽 텍스트와 겹치지 않도록 바깥쪽으로 뺌).
      화면 가장자리에 붙어 있어 왼쪽 공간이 없으면 JS가 .side-right(오른쪽 바깥)로 바꾸고,
@@ -754,6 +766,8 @@ function updateSelectionUI(prevId, newId){
       const mc = prevEl.querySelector('.marker-controls'); if(mc) mc.remove();
       const d = prevEl.querySelector('.del-btn'); if(d) d.remove();
       const ic = prevEl.querySelector('.icon-controls'); if(ic) ic.remove();
+      const rh = prevEl.querySelector('.rotate-handle'); if(rh) rh.remove();
+      const bc = prevEl.querySelector('.bubble-controls-col'); if(bc) bc.remove(); // 말풍선 전용 선특성·글자특성·복사 아이콘 열
     }
     buildLineDefaultsUI(); // 선택 해제되면 "선 추가" 패널 내용을 기본값 모드로 되돌림
   }
@@ -777,8 +791,14 @@ function updateSelectionUI(prevId, newId){
         buildLineDefaultsUI();
       } else if(obj.type === 'zone'){
         const stylePanel = buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker');
-        newEl.appendChild(buildMarkerControlsEl(obj, stylePanel));
+        const controlsRow = buildMarkerControlsEl(obj, stylePanel);
+        newEl.appendChild(controlsRow);
         newEl.appendChild(stylePanel);
+        if(obj.shape === 'arrow'){
+          const rotateHandle = buildArrowRotateHandleEl(obj, newEl);
+          controlsRow._rotateHandle = rotateHandle;
+          newEl.appendChild(rotateHandle);
+        }
       } else { // equip
         const iconContentDiv = newEl.querySelector('.icon-content');
         const iconWrap = newEl.querySelector('.icon');
@@ -925,14 +945,18 @@ let suppressNextClick = false;
 function clampPct(v){ return Math.max(0, Math.min(100, v)); }
 
 canvas.addEventListener('click', (e)=>{
-  if(suppressNextClick){ suppressNextClick = false; return; } // 방금 pointerdown에서 이미 처리함(드래그 이동 or 선택)
+  // suppressNextClick 플래그는 여기서 지우지 않고 document 클릭 리스너(선택 해제 담당)가
+  // 마지막에 한 번만 지운다 — 여기서 먼저 지워버리면, 뒤이어 실행되는 document 리스너가
+  // "방금 처리한 클릭"인지 알 수 없어 방금 만든 선택(예: 회전 손잡이 드래그 후)이
+  // 곧바로 풀려버리는 문제가 생긴다.
+  if(suppressNextClick) return; // 방금 pointerdown에서 이미 처리함(드래그 이동 or 선택)
   if(lineMode){
     if(e.target.closest && e.target.closest('.del-btn')) return; // 삭제버튼 클릭은 점 추가에서 제외
     addLinePoint(e);
     return;
   }
   if(zoneMode) return; // 구역 그리기는 드래그(pointerdown)로 처리
-  if(e.target === canvas) deselectObject();
+  // 빈 캔버스 클릭 시 선택 해제는 아래 document 클릭 리스너가 담당(캔버스 밖 클릭도 함께 처리하기 위함)
 });
 canvas.addEventListener('dblclick', (e)=>{
   if(lineMode){
@@ -1477,6 +1501,33 @@ function starPoints(x, y, w, h){
   }
   return pts.join(' ');
 }
+/* 화살표 강조 도형의 회전 각도(obj.rotation, 화면상 각도·0=오른쪽) 계산용.
+   캔버스(#lineLayer)의 viewBox는 0~100(정사각형)이지만 실제 용지 비율은 정사각형이
+   아니라서(가로:세로 = CANVAS_BASE_W:CANVAS_BASE_H), 그냥 SVG transform="rotate()"를
+   쓰면 화면에서 도형이 찌그러져 보인다. 각 꼭짓점을 회전시키기 전에 가로 방향만
+   비율(ZONE_ASPECT)만큼 늘렸다가 회전 후 다시 줄여서, 화면에 실제로 보이는 각도가
+   사용자가 손잡이를 드래그한 각도와 정확히 일치하도록 보정한다. */
+const ZONE_ASPECT = CANVAS_BASE_W / CANVAS_BASE_H;
+function rotateOffsetPct(dx, dy, deg){
+  if(!deg) return {dx, dy};
+  const rad = deg * Math.PI/180;
+  const px = dx * ZONE_ASPECT, py = dy;
+  const rx = px*Math.cos(rad) - py*Math.sin(rad);
+  const ry = px*Math.sin(rad) + py*Math.cos(rad);
+  return { dx: rx/ZONE_ASPECT, dy: ry };
+}
+/* 화살표 강조 도형의 꼭짓점 좌표(퍼센트 단위 문자열)를 obj.rotation 각도만큼 회전시켜 만든다.
+   기본 모양(회전 0도)은 예전과 동일하게 오른쪽을 가리키는 화살표. */
+function arrowPolygonPoints(obj, x, y, w, h){
+  const cx = x + w/2, cy = y + h/2;
+  const deg = obj.rotation || 0;
+  const base = [[0,0.3],[0.6,0.3],[0.6,0.05],[1,0.5],[0.6,0.95],[0.6,0.7],[0,0.7]];
+  return base.map(([nx,ny])=>{
+    const dx0 = nx*w - w/2, dy0 = ny*h - h/2;
+    const {dx, dy} = rotateOffsetPct(dx0, dy0, deg);
+    return `${(cx+dx).toFixed(2)},${(cy+dy).toFixed(2)}`;
+  }).join(' ');
+}
 function buildZoneShapeEl(obj, isDraft){
   const x = Math.min(obj.x1, obj.x2), y = Math.min(obj.y1, obj.y2);
   const w = Math.abs(obj.x2 - obj.x1), h = Math.abs(obj.y2 - obj.y1);
@@ -1499,7 +1550,7 @@ function buildZoneShapeEl(obj, isDraft){
     el.setAttribute('points', starPoints(x, y, w, h));
   } else if(shape === 'arrow'){
     el = document.createElementNS(SVG_NS, 'polygon');
-    el.setAttribute('points', [P(0,0.3), P(0.6,0.3), P(0.6,0.05), P(1,0.5), P(0.6,0.95), P(0.6,0.7), P(0,0.7)].join(' '));
+    el.setAttribute('points', arrowPolygonPoints(obj, x, y, w, h));
   } else if(shape === 'x'){
     el = document.createElementNS(SVG_NS, 'path');
     el.setAttribute('d', `M ${P(0.1,0.1)} L ${P(0.9,0.9)} M ${P(0.9,0.1)} L ${P(0.1,0.9)}`);
@@ -1529,9 +1580,28 @@ function buildMarkerControlsEl(obj, panelEl){
   const controlsRow = document.createElement('div');
   controlsRow.className = 'marker-controls';
 
+  /* 화살표 강조(구역설정 > 화살표) 도형 전용: 방향을 즉시 180도 뒤집는 버튼.
+     세밀한 각도 조절은 캔버스 위에 뜨는 회전 손잡이(파란 원)를 드래그해서 한다. */
+  if(obj.type === 'zone' && obj.shape === 'arrow'){
+    const flipBtn = document.createElement('div');
+    flipBtn.className = 'style-btn';
+    flipBtn.innerHTML = '<svg class="icn" viewBox="0 0 24 24"><path d="M8 7 4 12l4 5M16 7l4 5-4 5"/></svg>';
+    flipBtn.title = '화살표 방향 반전(180도)';
+    flipBtn.addEventListener('pointerdown', (e)=> e.stopPropagation());
+    flipBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      obj.rotation = ((obj.rotation || 0) + 180) % 360;
+      renderLineLayer();
+      if(controlsRow._rotateHandle && controlsRow._rotateHandle._reposition) controlsRow._rotateHandle._reposition();
+      if(FIREBASE_ENABLED) writeObjectRemote(obj);
+      resetSelectTimer();
+    });
+    controlsRow.appendChild(flipBtn);
+  }
+
   const styleBtn = document.createElement('div');
   styleBtn.className = 'style-btn';
-  styleBtn.innerText = '🎨';
+  styleBtn.innerHTML = '<svg class="icn" viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16z"/><line x1="14" y1="5" x2="18" y2="9"/></svg>';
   styleBtn.title = '색상 · 두께 · 점선 변경';
   styleBtn.addEventListener('pointerdown', (e)=> e.stopPropagation());
   styleBtn.addEventListener('click', (e)=>{
@@ -1635,11 +1705,58 @@ function buildLineMarker(obj){
       buildLineDefaultsUI();
     } else {
       const stylePanel = buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker');
-      wrap.appendChild(buildMarkerControlsEl(obj, stylePanel));
+      const controlsRow = buildMarkerControlsEl(obj, stylePanel);
+      wrap.appendChild(controlsRow);
       wrap.appendChild(stylePanel);
+      if(obj.shape === 'arrow'){
+        const rotateHandle = buildArrowRotateHandleEl(obj, wrap);
+        controlsRow._rotateHandle = rotateHandle; // 반전 버튼이 손잡이 위치도 같이 갱신할 수 있도록 연결
+        wrap.appendChild(rotateHandle);
+      }
     }
   }
   return wrap;
+}
+/* 화살표 강조 도형 전용 회전 손잡이(파란 원). 도형 중심(=wrap의 기준점) 둘레를
+   드래그해서 원하는 방향으로 자유롭게 회전시킨다. 화면 픽셀 좌표를 그대로 써서
+   각도를 계산하므로(퍼센트 좌표가 아님) 용지 가로세로 비율과 무관하게 마우스 위치와
+   화살표 방향이 항상 일치한다. */
+function buildArrowRotateHandleEl(obj, wrap){
+  const R = 46; // 도형 중심으로부터 손잡이까지 거리(px)
+  const handle = document.createElement('div');
+  handle.className = 'rotate-handle';
+  handle.title = '드래그해서 화살표 방향 회전';
+  handle.innerHTML = '<svg class="icn icn-only" viewBox="0 0 24 24" style="width:13px;height:13px;"><path d="M3 12a9 9 0 1 1 2.6 6.3"/><polyline points="3 17 3 21 7 21"/></svg>';
+  function reposition(){
+    const rad = (obj.rotation || 0) * Math.PI / 180;
+    handle.style.left = (R * Math.cos(rad)) + 'px';
+    handle.style.top = (R * Math.sin(rad)) + 'px';
+  }
+  handle._reposition = reposition;
+  reposition();
+  handle.addEventListener('pointerdown', (e)=>{
+    e.preventDefault();
+    e.stopPropagation();
+    // 손잡이를 눌렀다가 빈 캔버스 위에서 손을 떼면 뒤이어 발생하는 click 이벤트가
+    // canvas의 "빈 곳 클릭 시 선택 해제" 로직을 건드려 회전 중 선택이 풀려버릴 수 있어 방지
+    suppressNextClick = true;
+    const wrapRect = wrap.getBoundingClientRect(); // wrap은 0x0 크기라 left/top이 곧 도형 중심의 화면 좌표
+    const centerX = wrapRect.left, centerY = wrapRect.top;
+    handle.style.cursor = 'grabbing';
+    function move(ev){
+      const ang = Math.atan2(ev.clientY - centerY, ev.clientX - centerX) * 180 / Math.PI;
+      obj.rotation = ((ang % 360) + 360) % 360;
+      reposition();
+      renderLineLayer();
+    }
+    function up(){
+      handle.style.cursor = 'grab';
+      if(FIREBASE_ENABLED) writeObjectRemote(obj);
+      resetSelectTimer();
+    }
+    bindTempPointerDrag(move, up);
+  });
+  return handle;
 }
 /* 선/구역 공용 스타일 패널(색상·두께·점선). onChangeVisual: 값 변경 시 SVG 다시 그릴 콜백
    variant='marker'면 선/구역 마커(삭제·색상 버튼) 아래쪽에 겹치지 않게 배치 */
@@ -1733,11 +1850,14 @@ function buildStylePanelEl(obj, onChangeVisual, variant, bubbleTextEl, bubbleWra
     opNumber.style.padding = '3px 4px';
     opNumber.style.fontSize = '11px';
     opNumber.style.textAlign = 'center';
-    function applyOpacity(newOpacity, persist){
+    // skipNumberSync: true면 숫자 입력칸(opNumber) 자신의 값은 건드리지 않는다.
+    // (입력 중인 칸에 값을 다시 써넣으면 커서 위치가 튀고 입력값이 범위로 강제 보정되면서
+    //  숫자가 튕기는 것처럼 보이는 문제가 있어, 입력 중에는 슬라이더/미리보기만 갱신한다)
+    function applyOpacity(newOpacity, persist, skipNumberSync){
       obj.opacity = newOpacity;
       bubbleWrapEl.style.backgroundColor = `rgba(255,255,204,${obj.opacity})`;
       opSlider.value = obj.opacity;
-      opNumber.value = Math.round(obj.opacity * 100);
+      if(!skipNumberSync) opNumber.value = Math.round(obj.opacity * 100);
       if(persist && FIREBASE_ENABLED) writeObjectRemote(obj);
       resetSelectTimer();
     }
@@ -1748,10 +1868,19 @@ function buildStylePanelEl(obj, onChangeVisual, variant, bubbleTextEl, bubbleWra
     opNumber.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); resetSelectTimer(); });
     opNumber.addEventListener('click', (e)=> e.stopPropagation());
     opNumber.addEventListener('input', (e)=>{
-      const pct = Math.max(20, Math.min(100, parseInt(e.target.value, 10) || 100));
-      applyOpacity(pct / 100, false);
+      // 입력 중(예: "80"을 치려고 "8"만 친 순간)에는 범위로 강제 보정한 값을 칸에 되써넣지 않고,
+      // 미리보기(투명도)만 부드럽게 갱신한다 — 최종 값 보정은 change(포커스 아웃/엔터) 시점에만.
+      if(e.target.value === '') return;
+      const num = parseInt(e.target.value, 10);
+      if(isNaN(num)) return;
+      const pct = Math.max(20, Math.min(100, num));
+      applyOpacity(pct / 100, false, true);
     });
-    opNumber.addEventListener('change', ()=>{ applyOpacity(obj.opacity, true); });
+    opNumber.addEventListener('change', (e)=>{
+      const num = parseInt(e.target.value, 10);
+      const pct = isNaN(num) ? Math.round(obj.opacity * 100) : Math.max(20, Math.min(100, num));
+      applyOpacity(pct / 100, true);
+    });
     opRow.appendChild(opLabel);
     opRow.appendChild(opSlider);
     opRow.appendChild(opNumber);
@@ -1930,10 +2059,13 @@ function buildStylePanelEl(obj, onChangeVisual, variant, bubbleTextEl, bubbleWra
   opNumber.style.padding = '3px 4px';
   opNumber.style.fontSize = '11px';
   opNumber.style.textAlign = 'center';
-  function applyStrokeOpacity(newOpacity, persist){
+  // skipNumberSync: true면 숫자 입력칸(opNumber) 자신의 값은 건드리지 않는다.
+  // (입력 중인 칸에 값을 다시 써넣으면 커서 위치가 튀고 입력값이 범위로 강제 보정되면서
+  //  숫자가 튕기는 것처럼 보이는 문제가 있어, 입력 중에는 슬라이더/미리보기만 갱신한다)
+  function applyStrokeOpacity(newOpacity, persist, skipNumberSync){
     obj.strokeOpacity = newOpacity;
     opSlider.value = obj.strokeOpacity;
-    opNumber.value = Math.round(obj.strokeOpacity * 100);
+    if(!skipNumberSync) opNumber.value = Math.round(obj.strokeOpacity * 100);
     onChangeVisual();
     if(persist && FIREBASE_ENABLED) writeObjectRemote(obj);
     resetSelectTimer();
@@ -1945,10 +2077,19 @@ function buildStylePanelEl(obj, onChangeVisual, variant, bubbleTextEl, bubbleWra
   opNumber.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); resetSelectTimer(); });
   opNumber.addEventListener('click', (e)=> e.stopPropagation());
   opNumber.addEventListener('input', (e)=>{
-    const pct = Math.max(10, Math.min(100, parseInt(e.target.value, 10) || 100));
-    applyStrokeOpacity(pct / 100, false);
+    // 입력 중(예: "80"을 치려고 "8"만 친 순간)에는 범위로 강제 보정한 값을 칸에 되써넣지 않고,
+    // 미리보기(투명도)만 부드럽게 갱신한다 — 최종 값 보정은 change(포커스 아웃/엔터) 시점에만.
+    if(e.target.value === '') return;
+    const num = parseInt(e.target.value, 10);
+    if(isNaN(num)) return;
+    const pct = Math.max(10, Math.min(100, num));
+    applyStrokeOpacity(pct / 100, false, true);
   });
-  opNumber.addEventListener('change', ()=>{ applyStrokeOpacity(obj.strokeOpacity, true); });
+  opNumber.addEventListener('change', (e)=>{
+    const num = parseInt(e.target.value, 10);
+    const pct = isNaN(num) ? Math.round(obj.strokeOpacity * 100) : Math.max(10, Math.min(100, num));
+    applyStrokeOpacity(pct / 100, true);
+  });
   opRow.appendChild(opLabel);
   opRow.appendChild(opSlider);
   opRow.appendChild(opNumber);
@@ -3122,9 +3263,18 @@ function addEquipment(name, icon, defaultSize){
   if(FIREBASE_ENABLED) writeObjectRemote(obj);
 }
 
-/* ---------------- 배경 ---------------- */
-let lastBgDataURL = null; // 명시적으로 삭제하기 전까지, 첨부한 날짜 "이후" 날짜에만 이어서 쓸 배경사진
-let lastBgDate = null;    // 위 배경사진을 첨부(또는 확인)한 날짜 — 이 날짜보다 이전 날짜에는 적용하지 않음
+/* ---------------- 배경 ----------------
+   배경사진은 "그날의 계획(plans/날짜)"과는 별도로 사이트 전체가 공유하는 하나의
+   "공용 배경사진"(sharedBg)으로도 항상 함께 저장해 둔다. 작업일을 바꾸거나 "새 계획"으로
+   넘어가서 그 날짜에 아직 자신만의 배경사진이 없으면 이 공용 배경사진을 그대로 이어서
+   보여주고, 사용자가 새 사진으로 교체하거나 배경사진을 삭제하기 전까지는 날짜가 몇 번을
+   바뀌어도(심지어 새로고침해도) 계속 유지된다.
+   (예전에는 이번 세션에서 방금 첨부/확인한 배경만 메모리에 잠깐 기억해뒀다가 그보다
+   "이후" 날짜에만 이어붙이는 방식이라, 새로고침하거나 배경을 첨부하지 않은 다른 날짜를
+   먼저 열면 배경이 사라지는 문제가 있었다) */
+const SHARED_BG_KEY = '__shared_bg__'; // IndexedDB(backgrounds 스토어)에 공용 배경을 저장할 때 쓰는 고정 키
+let sharedBgCache = null; // 공용 배경사진(data URL) 최신 값을 동기적으로도 바로 쓸 수 있도록 기억해 두는 캐시
+let currentPlanHasOwnBg = false; // 지금 보고 있는 날짜가 "자신만의" 배경사진을 갖고 있는지(공용 배경 실시간 갱신에 사용)
 
 /* 배경사진 가로·세로 크기(%)/위치(%)를 canvasWrap에 반영 + 표시 라벨/드래그 핸들 위치 동기화 */
 function applyBgSize(){
@@ -3238,11 +3388,14 @@ document.getElementById('bgUpload').addEventListener('change', async function(e)
     // (Firebase Storage는 결제 등록이 필요해졌으므로 사용하지 않고, Realtime Database에 바로 저장)
     const dataURL = await fileToResizedJPEG(file, 1400, 0.8);
     state.bgDataURL = dataURL;
-    lastBgDataURL = dataURL;
-    lastBgDate = state.date; // 지금 보고 있는 날짜부터 적용 — 이전 날짜에는 영향 없음
+    sharedBgCache = dataURL; // 공용 배경으로도 저장 → 다른 날짜/새 계획으로 넘어가도 계속 이어서 보임
+    currentPlanHasOwnBg = true;
     renderCanvas();
     if(FIREBASE_ENABLED){
       await fbDb.ref(`plans/${state.date}/bgURL`).set(dataURL);
+      await fbDb.ref('sharedBg/url').set(dataURL);
+    } else {
+      idbSaveBg(SHARED_BG_KEY, dataURL);
     }
   }catch(err){
     console.error(err);
@@ -3255,8 +3408,8 @@ function removeBackground(){
   state.bgSizeH = 100;
   state.bgPosX = 50;
   state.bgPosY = 50;
-  lastBgDataURL = null; // 명시적으로 삭제 → 이후 새 계획/다음 날짜에도 더 이상 이어지지 않음
-  lastBgDate = null;
+  sharedBgCache = null; // 명시적으로 삭제 → 공용 배경도 함께 지워서 이후 날짜/새 계획에도 더 이상 이어지지 않음
+  currentPlanHasOwnBg = false;
   renderCanvas();
   if(FIREBASE_ENABLED){
     fbDb.ref(`plans/${state.date}/bgURL`).remove();
@@ -3264,12 +3417,10 @@ function removeBackground(){
     fbDb.ref(`plans/${state.date}/bgSizeH`).remove();
     fbDb.ref(`plans/${state.date}/bgPosX`).remove();
     fbDb.ref(`plans/${state.date}/bgPosY`).remove();
+    fbDb.ref('sharedBg/url').remove();
+  } else {
+    idbDeleteBg(SHARED_BG_KEY);
   }
-}
-/* date(YYYY-MM-DD)가 lastBgDate 이후(포함)인 경우에만 이어쓰기 배경을 적용 */
-function carriedBgFor(date){
-  if(lastBgDataURL && lastBgDate && date >= lastBgDate) return lastBgDataURL;
-  return null;
 }
 
 /* ---------------- 헤더(현장명/날짜) ---------------- */
@@ -3338,6 +3489,18 @@ document.addEventListener('click', (e)=>{
   if(openPanel.id === 'panel-line' && getSelectedLineObj()) return;
   closeAllFlyouts();
 });
+/* 말풍선/선/구역/장비를 선택하면 뜨는 특성 패널(색상·크기조절·삭제 버튼 등)을
+   "다른 곳을 클릭하면" 확실히 닫는 로직. 예전에는 캔버스의 "빈 곳"을 클릭했을 때만
+   선택이 풀렸는데, 그 결과 좌/우 아이콘 레일이나 펼침 패널처럼 캔버스 바깥 UI를 클릭하면
+   선택된 항목의 특성 패널이 계속 화면에 남아있는 문제가 있었다. 이제는 캔버스 안팎을
+   가리지 않고, 선택된 항목(과 그 특성 패널·버튼) 밖 어디를 클릭해도 선택이 풀린다. */
+document.addEventListener('click', (e)=>{
+  if(suppressNextClick){ suppressNextClick = false; return; } // 방금 드래그·이동·회전 등에서 이미 처리한 클릭
+  if(!selectedId) return;
+  const selEl = canvas.querySelector(`[data-oid="${selectedId}"]`);
+  if(selEl && selEl.contains(e.target)) return; // 선택된 항목 자신(또는 그 특성 패널·버튼) 위 클릭이면 유지
+  deselectObject();
+});
 function openHelp(){
   document.getElementById('helpModal').classList.add('open');
 }
@@ -3377,11 +3540,11 @@ function subscribeToDate(date){
     state.titleText = val.titleText || state.titleText || '명일작업현황';
     if(val.bgURL){
       state.bgDataURL = val.bgURL;
-      lastBgDataURL = val.bgURL; lastBgDate = date; // 이 날짜 기준으로 갱신(더 이후 날짜로만 이어짐)
+      sharedBgCache = val.bgURL; // 공용 배경 캐시도 최신 상태로 갱신
+      currentPlanHasOwnBg = true;
     } else {
-      const carried = carriedBgFor(date); // 첨부한 날짜 "이후"인 경우에만 이어서 사용
-      state.bgDataURL = carried;
-      if(carried) fbDb.ref(`plans/${date}/bgURL`).set(carried); // 팀원들도 같은 배경 보이도록 저장
+      state.bgDataURL = sharedBgCache; // 이 날짜에 자신만의 배경이 없으면 공용 배경을 그대로 이어서 사용
+      currentPlanHasOwnBg = false;
     }
     state.bgSizeW = (val.bgSizeW != null) ? val.bgSizeW : 100;
     state.bgSizeH = (val.bgSizeH != null) ? val.bgSizeH : 100;
@@ -3402,6 +3565,19 @@ function subscribeToDate(date){
   });
   subscribePresence(date);
   refreshHistorySelect();
+}
+
+/* 앱 시작 시 한 번만 구독: 날짜와 무관하게 "공용 배경사진"(sharedBg) 값을 계속 실시간으로
+   따라가서 sharedBgCache에 채워 둔다. 지금 보고 있는 날짜가 자신만의 배경사진이 없는
+   상태에서 공용 배경이 바뀌면(다른 팀원이 새로 첨부/삭제) 화면도 함께 갱신한다. */
+function subscribeSharedBg(){
+  fbDb.ref('sharedBg/url').on('value', (snap)=>{
+    sharedBgCache = snap.val() || null;
+    if(!currentPlanHasOwnBg){
+      state.bgDataURL = sharedBgCache;
+      renderCanvas();
+    }
+  });
 }
 
 function subscribePresence(date){
@@ -3504,7 +3680,7 @@ function saveAsNewDate(){
   state.siteName = siteName;
   state.titleText = titleText;
   state.date = targetDate;
-  lastBgDataURL = state.bgDataURL || lastBgDataURL;
+  if(state.bgDataURL) sharedBgCache = state.bgDataURL;
   updateHeaderDisplay();
   refreshHistorySelect();
   alert(`${targetDate} 날짜로 저장했습니다. 이제 이 날짜를 편집 중입니다.`);
@@ -3531,15 +3707,17 @@ async function loadPlan(date){
   const savedBg = await idbLoadBg(date);
   if(savedBg){
     state.bgDataURL = savedBg;
-    lastBgDataURL = savedBg; lastBgDate = date;
+    sharedBgCache = savedBg; // 공용 배경 캐시도 최신 상태로 갱신
   } else {
-    state.bgDataURL = carriedBgFor(date); // 첨부한 날짜 "이후"인 경우에만 이어서 사용
+    // 이 날짜에 저장된 배경이 없으면 공용 배경사진을 이어서 사용(교체·삭제 전까지 계속 유지)
+    state.bgDataURL = await idbLoadBg(SHARED_BG_KEY);
+    sharedBgCache = state.bgDataURL;
   }
   updateHeaderDisplay();
   renderCanvas();
 }
 
-function newPlan(){
+async function newPlan(){
   if(!confirm('현재 화면을 초기화하고 새 계획을 시작할까요? (저장하지 않은 내용은 사라집니다)')) return;
   const newDate = todayStr();
   if(FIREBASE_ENABLED){
@@ -3547,7 +3725,10 @@ function newPlan(){
     subscribeToDate(newDate);
     return;
   }
-  state = { siteName: state.siteName, titleText: state.titleText, date: newDate, bgDataURL: carriedBgFor(newDate), bgSizeW: state.bgSizeW, bgSizeH: state.bgSizeH, bgPosX: state.bgPosX, bgPosY: state.bgPosY, objects: [] };
+  // 마지막으로 첨부(또는 유지 중)한 공용 배경사진을 새 계획에도 그대로 이어서 사용
+  const carriedBg = await idbLoadBg(SHARED_BG_KEY);
+  sharedBgCache = carriedBg;
+  state = { siteName: state.siteName, titleText: state.titleText, date: newDate, bgDataURL: carriedBg, bgSizeW: state.bgSizeW, bgSizeH: state.bgSizeH, bgPosX: state.bgPosX, bgPosY: state.bgPosY, objects: [] };
   updateHeaderDisplay();
   renderCanvas();
 }
@@ -3605,31 +3786,48 @@ function onHistSelect(){
   if(date) loadPlan(date);
 }
 
+/* ---------------- PDF/사진 출력 시 "실시간 공동작업 접속 인원" 배지 숨기기 ----------------
+   출력 결과물에는 몇 명이 접속해 있는지 같은 실시간 협업 정보가 필요 없으므로,
+   캡처 직전에만 잠깐 숨겼다가 캡처가 끝나면 원래 상태(표시 여부)로 복원한다. */
+function withPresenceHidden(fn){
+  // "실시간 공동작업 켜짐/로컬 저장 모드" 배지(syncBadge)와 "N명 접속 중" 배지(presenceBox)
+  // 둘 다 statusBox 안에 있으므로, statusBox 전체를 캡처 직전에만 숨겼다가 끝나면 복원한다.
+  const statusBox = document.getElementById('statusBox');
+  const prevDisplay = statusBox ? statusBox.style.display : null;
+  if(statusBox) statusBox.style.display = 'none';
+  return Promise.resolve().then(fn).finally(()=>{
+    if(statusBox) statusBox.style.display = prevDisplay || '';
+  });
+}
 /* ---------------- PDF 출력 ---------------- */
 async function exportPDF(){
-  const target = document.getElementById('printArea');
-  const canvasImg = await html2canvas(target, {useCORS:true, scale:2, backgroundColor:'#ffffff'});
-  const imgData = canvasImg.toDataURL('image/jpeg', 0.95);
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF({orientation:'landscape', unit:'pt', format:'a4'});
-  const pageW = pdf.internal.pageSize.getWidth();
-  const pageH = pdf.internal.pageSize.getHeight();
-  const ratio = Math.min(pageW / canvasImg.width, pageH / canvasImg.height);
-  const w = canvasImg.width * ratio;
-  const h = canvasImg.height * ratio;
-  pdf.addImage(imgData, 'JPEG', (pageW-w)/2, (pageH-h)/2, w, h);
-  pdf.save(`${state.siteName}_${state.date}.pdf`);
+  await withPresenceHidden(async ()=>{
+    const target = document.getElementById('printArea');
+    const canvasImg = await html2canvas(target, {useCORS:true, scale:2, backgroundColor:'#ffffff'});
+    const imgData = canvasImg.toDataURL('image/jpeg', 0.95);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({orientation:'landscape', unit:'pt', format:'a4'});
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const ratio = Math.min(pageW / canvasImg.width, pageH / canvasImg.height);
+    const w = canvasImg.width * ratio;
+    const h = canvasImg.height * ratio;
+    pdf.addImage(imgData, 'JPEG', (pageW-w)/2, (pageH-h)/2, w, h);
+    pdf.save(`${state.siteName}_${state.date}.pdf`);
+  });
 }
 async function exportImage(){
-  const target = document.getElementById('printArea');
-  const canvasImg = await html2canvas(target, {useCORS:true, scale:2, backgroundColor:'#ffffff'});
-  const imgData = canvasImg.toDataURL('image/png');
-  const a = document.createElement('a');
-  a.href = imgData;
-  a.download = `${state.siteName}_${state.date}.png`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  await withPresenceHidden(async ()=>{
+    const target = document.getElementById('printArea');
+    const canvasImg = await html2canvas(target, {useCORS:true, scale:2, backgroundColor:'#ffffff'});
+    const imgData = canvasImg.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = imgData;
+    a.download = `${state.siteName}_${state.date}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
 }
 
 /* ---------------- PC 전용 안내(모바일 감지) ----------------
@@ -3650,10 +3848,24 @@ function checkMobileAndWarn(){
   document.getElementById('workDate').value = state.date;
   updateHeaderDisplay();
   if(FIREBASE_ENABLED){
+    subscribeSharedBg(); // 날짜와 무관한 공용 배경사진을 앱 시작 시 한 번만 구독
     subscribeToDate(state.date);
   } else {
     refreshHistorySelect();
     renderCanvas();
+    // 처음 여는 화면에도(아직 이 날짜만의 배경이 없다면) 마지막으로 첨부해 둔
+    // 공용 배경사진을 이어서 보여준다 — 새로고침해도 배경이 사라지지 않도록.
+    if(!state.bgDataURL){
+      idbLoadBg(SHARED_BG_KEY).then(bg=>{
+        sharedBgCache = bg || null;
+        if(!state.bgDataURL && sharedBgCache){
+          state.bgDataURL = sharedBgCache;
+          renderCanvas();
+        }
+      });
+    } else {
+      sharedBgCache = state.bgDataURL;
+    }
   }
 })();
 </script>
