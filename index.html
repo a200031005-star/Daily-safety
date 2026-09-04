@@ -116,6 +116,30 @@
   .bubble b{display:block; font-size:12.5px; margin-bottom:2px;}
   .bubble-text{display:block; white-space:pre-wrap; word-break:break-word;}
   .bubble-textwrap{display:block;}
+  /* 구역설정(사각형/원형/삼각형/별/화살표) 도형 안에 표시되는 글자.
+     도형이 회전되어 있으면 글자도 함께 회전하고, 도형 중심에 항상 정렬된다. */
+  .zone-text{
+    position:absolute; left:0; top:0;
+    display:flex; align-items:center; justify-content:center;
+    pointer-events:none;
+    overflow:hidden;
+  }
+  .zone-text-inner{
+    width:100%; max-height:100%; overflow:hidden;
+    text-align:center; white-space:pre-wrap; word-break:break-word;
+    outline:none; line-height:1.25;
+    text-shadow:0 1px 2px rgba(0,0,0,.6), 0 0 5px rgba(0,0,0,.4);
+    font-weight:600;
+  }
+  .zone-text-inner.editing{
+    pointer-events:auto;
+    background:rgba(255,255,255,.92);
+    color:#1a1a1a !important;
+    text-shadow:none;
+    border-radius:4px;
+    padding:2px 5px;
+    cursor:text;
+  }
 
   .equip{
     position:absolute; cursor:grab; user-select:none; touch-action:pinch-zoom;
@@ -200,6 +224,19 @@
   }
   @media (pointer:coarse){
     .rotate-handle{ width:30px; height:30px; }
+  }
+  /* 구역설정(사각형/원형/삼각형 등) 도형의 크기조절 손잡이 8개(모서리4+변중앙4).
+     파워포인트 도형처럼 흰 원 손잡이로 표시되며, JS가 매번 left/top(px)을
+     도형 중심 기준 회전 반영 좌표로 갱신한다. */
+  .zone-resize-handles{ position:absolute; left:0; top:0; width:0; height:0; }
+  .zone-resize-handle{
+    position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px;
+    border-radius:50%; background:#fff; border:2px solid var(--blue);
+    box-shadow:1px 1px 3px rgba(0,0,0,.35); z-index:22;
+    touch-action:none; -webkit-touch-callout:none;
+  }
+  @media (pointer:coarse){
+    .zone-resize-handle{ width:20px; height:20px; margin:-10px 0 0 -10px; }
   }
   /* 말풍선 전용: 선특성·글자특성·복사 아이콘을 말풍선 "바깥" 왼쪽에 세로로 배치
      (말풍선 안쪽 텍스트와 겹치지 않도록 바깥쪽으로 뺌).
@@ -767,6 +804,7 @@ function updateSelectionUI(prevId, newId){
       const d = prevEl.querySelector('.del-btn'); if(d) d.remove();
       const ic = prevEl.querySelector('.icon-controls'); if(ic) ic.remove();
       const rh = prevEl.querySelector('.rotate-handle'); if(rh) rh.remove();
+      const zrh = prevEl.querySelector('.zone-resize-handles'); if(zrh) zrh.remove();
       const bc = prevEl.querySelector('.bubble-controls-col'); if(bc) bc.remove(); // 말풍선 전용 선특성·글자특성·복사 아이콘 열
     }
     buildLineDefaultsUI(); // 선택 해제되면 "선 추가" 패널 내용을 기본값 모드로 되돌림
@@ -790,15 +828,7 @@ function updateSelectionUI(prevId, newId){
         openFlyoutForced('panel-line');
         buildLineDefaultsUI();
       } else if(obj.type === 'zone'){
-        const stylePanel = buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker');
-        const controlsRow = buildMarkerControlsEl(obj, stylePanel);
-        newEl.appendChild(controlsRow);
-        newEl.appendChild(stylePanel);
-        if(obj.shape === 'arrow'){
-          const rotateHandle = buildArrowRotateHandleEl(obj, newEl);
-          controlsRow._rotateHandle = rotateHandle;
-          newEl.appendChild(rotateHandle);
-        }
+        attachZoneHandles(obj, newEl);
       } else { // equip
         const iconContentDiv = newEl.querySelector('.icon-content');
         const iconWrap = newEl.querySelector('.icon');
@@ -962,6 +992,18 @@ canvas.addEventListener('dblclick', (e)=>{
   if(lineMode){
     e.preventDefault();
     finishLine();
+    return;
+  }
+  if(zoneMode) return;
+  if(e.target !== canvas) return; // 텍스트 편집 중(pointer-events:auto)이면 그 요소가 target이라 여기로 안 옴
+  const rect = stage.getBoundingClientRect();
+  const px = ((e.clientX - rect.left) / rect.width) * 100;
+  const py = ((e.clientY - rect.top) / rect.height) * 100;
+  const hit = findShapeAt(px, py);
+  if(hit && hit.type === 'zone'){
+    e.preventDefault();
+    suppressNextClick = true;
+    enterZoneTextEdit(hit);
   }
 });
 // 선/구역을 직접 클릭·드래그해서 선택하거나 위치를 이동
@@ -994,6 +1036,7 @@ canvas.addEventListener('pointerdown', (e)=>{
       hit.x2 = clampPct(snapshot.x2+dxPct); hit.y2 = clampPct(snapshot.y2+dyPct);
     }
     renderLineLayer();
+    if(hit.id === selectedId) updateMarkerWrapPosition(hit); // 선택된 상태로 이동 중이면 삭제/색상/크기조절 손잡이도 함께 따라가게 함
   }
   function up(){
     draggingLocally.delete(hit.id);
@@ -1003,6 +1046,12 @@ canvas.addEventListener('pointerdown', (e)=>{
       if(selectedId !== hit.id) selectObject(hit.id); else resetSelectTimer();
     } else {
       selectObject(hit.id);
+      // 모바일 터치는 dblclick이 잘 발생하지 않아, 짧은 시간 안에 같은 자리를 두 번 탭했는지
+      // 직접 감지해서 데스크톱 더블클릭과 동일하게 텍스트 편집모드로 진입시킨다.
+      if(hit.type === 'zone' && e.pointerType !== 'mouse' &&
+         checkAndConsumeDoubleTap('zoneText:'+hit.id, e.clientX, e.clientY, 400, 25)){
+        enterZoneTextEdit(hit);
+      }
     }
   }
   bindTempPointerDrag(move, up);
@@ -1501,12 +1550,13 @@ function starPoints(x, y, w, h){
   }
   return pts.join(' ');
 }
-/* 화살표 강조 도형의 회전 각도(obj.rotation, 화면상 각도·0=오른쪽) 계산용.
+/* 구역(zone) 도형의 회전 각도(obj.rotation, 화면상 각도·0=오른쪽/기본방향) 계산용.
    캔버스(#lineLayer)의 viewBox는 0~100(정사각형)이지만 실제 용지 비율은 정사각형이
    아니라서(가로:세로 = CANVAS_BASE_W:CANVAS_BASE_H), 그냥 SVG transform="rotate()"를
-   쓰면 화면에서 도형이 찌그러져 보인다. 각 꼭짓점을 회전시키기 전에 가로 방향만
+   쓰면 화면에서 도형이 찌그러져 보인다. 좌표를 회전시키기 전에 가로 방향만
    비율(ZONE_ASPECT)만큼 늘렸다가 회전 후 다시 줄여서, 화면에 실제로 보이는 각도가
-   사용자가 손잡이를 드래그한 각도와 정확히 일치하도록 보정한다. */
+   사용자가 손잡이를 드래그한 각도와 정확히 일치하도록 보정한다.
+   (모든 구역 도형-사각형/원형/삼각형/별/화살표/X/체크-이 이 함수 하나로 회전 처리됨) */
 const ZONE_ASPECT = CANVAS_BASE_W / CANVAS_BASE_H;
 function rotateOffsetPct(dx, dy, deg){
   if(!deg) return {dx, dy};
@@ -1516,17 +1566,12 @@ function rotateOffsetPct(dx, dy, deg){
   const ry = px*Math.sin(rad) + py*Math.cos(rad);
   return { dx: rx/ZONE_ASPECT, dy: ry };
 }
-/* 화살표 강조 도형의 꼭짓점 좌표(퍼센트 단위 문자열)를 obj.rotation 각도만큼 회전시켜 만든다.
-   기본 모양(회전 0도)은 예전과 동일하게 오른쪽을 가리키는 화살표. */
-function arrowPolygonPoints(obj, x, y, w, h){
-  const cx = x + w/2, cy = y + h/2;
-  const deg = obj.rotation || 0;
+/* 회전 전(기본 방향, 오른쪽을 가리키는) 화살표 강조 도형의 꼭짓점 좌표.
+   실제 화면 회전은 buildZoneShapeEl()에서 obj.rotation을 SVG transform으로
+   모든 구역 도형에 공통 적용하므로, 여기서는 더 이상 회전을 계산하지 않는다. */
+function arrowPolygonPoints(x, y, w, h){
   const base = [[0,0.3],[0.6,0.3],[0.6,0.05],[1,0.5],[0.6,0.95],[0.6,0.7],[0,0.7]];
-  return base.map(([nx,ny])=>{
-    const dx0 = nx*w - w/2, dy0 = ny*h - h/2;
-    const {dx, dy} = rotateOffsetPct(dx0, dy0, deg);
-    return `${(cx+dx).toFixed(2)},${(cy+dy).toFixed(2)}`;
-  }).join(' ');
+  return base.map(([nx,ny])=>`${(x+nx*w).toFixed(2)},${(y+ny*h).toFixed(2)}`).join(' ');
 }
 function buildZoneShapeEl(obj, isDraft){
   const x = Math.min(obj.x1, obj.x2), y = Math.min(obj.y1, obj.y2);
@@ -1550,7 +1595,7 @@ function buildZoneShapeEl(obj, isDraft){
     el.setAttribute('points', starPoints(x, y, w, h));
   } else if(shape === 'arrow'){
     el = document.createElementNS(SVG_NS, 'polygon');
-    el.setAttribute('points', arrowPolygonPoints(obj, x, y, w, h));
+    el.setAttribute('points', arrowPolygonPoints(x, y, w, h));
   } else if(shape === 'x'){
     el = document.createElementNS(SVG_NS, 'path');
     el.setAttribute('d', `M ${P(0.1,0.1)} L ${P(0.9,0.9)} M ${P(0.9,0.1)} L ${P(0.1,0.9)}`);
@@ -1573,6 +1618,17 @@ function buildZoneShapeEl(obj, isDraft){
   applyLineStyle(el, obj);
   if(isDraft){ el.setAttribute('stroke-dasharray', '2,1.5'); el.classList.add('draft-el'); }
   else { applyDash(el, obj); }
+  /* 회전(obj.rotation, 0=기본방향): 사각형/원형/삼각형/별/화살표/X/체크 등
+     모든 구역 도형에 공통으로 적용. viewBox가 정사각형이 아닌 화면 비율로
+     늘어나 있으므로(ZONE_ASPECT), 그 왜곡을 상쇄했다가 회전하고 다시 되돌리는
+     방식으로 화면에 보이는 각도가 실제 드래그 각도와 정확히 일치하게 만든다. */
+  const rotDeg = obj.rotation || 0;
+  if(rotDeg && !isDraft){
+    const cx = x + w/2, cy = y + h/2;
+    const s = (1/ZONE_ASPECT).toFixed(6);
+    el.setAttribute('transform',
+      `translate(${cx} ${cy}) scale(${s} 1) rotate(${rotDeg}) scale(${ZONE_ASPECT.toFixed(6)} 1) translate(${-cx} ${-cy})`);
+  }
   return el;
 }
 /* obj: 대상 객체, panelEl: 눌렀을 때 열고 닫을 특성 패널(style-panel) */
@@ -1592,7 +1648,7 @@ function buildMarkerControlsEl(obj, panelEl){
       e.stopPropagation();
       obj.rotation = ((obj.rotation || 0) + 180) % 360;
       renderLineLayer();
-      if(controlsRow._rotateHandle && controlsRow._rotateHandle._reposition) controlsRow._rotateHandle._reposition();
+      if(controlsRow.parentElement) refreshZoneHandlePositions(controlsRow.parentElement);
       if(FIREBASE_ENABLED) writeObjectRemote(obj);
       resetSelectTimer();
     });
@@ -1680,6 +1736,81 @@ function buildBubbleControlsRow(obj, panel){
 
   return row;
 }
+/* 구역설정 도형 중 사각형/원형/삼각형/별/화살표에는 안에 글자를 넣을 수 있다.
+   (X표시·체크표시는 글자를 담기에 적합하지 않아 제외) */
+const ZONE_TEXT_SHAPES = new Set(['rect', 'circle', 'triangle', 'star', 'arrow']);
+/* 도형 안에 표시되는 글자 오버레이. 항상(선택 여부와 무관하게) 보여야 하므로
+   buildLineMarker에서 선택 여부 체크와 별개로 매번 붙인다. 평소에는
+   pointer-events:none이라 클릭이 그대로 아래 도형(SVG)까지 통과해서 도형 선택/이동에
+   지장을 주지 않고, 더블클릭(또는 모바일 더블탭)으로 편집모드에 들어갈 때만
+   (canvas의 dblclick 핸들러 등에서 wrap._enterEdit()를 호출) 잠깐 pointer-events를 켠다. */
+function buildZoneTextEl(obj){
+  const shape = obj.shape || 'rect';
+  if(!ZONE_TEXT_SHAPES.has(shape)) return null;
+  if(obj.fontSize === undefined) obj.fontSize = 13;
+  if(obj.textColor === undefined) obj.textColor = '#ffffff';
+  const wrap = document.createElement('div');
+  wrap.className = 'zone-text';
+  function reposition(){
+    const wPx = Math.abs(obj.x2 - obj.x1) / 100 * CANVAS_BASE_W;
+    const hPx = Math.abs(obj.y2 - obj.y1) / 100 * CANVAS_BASE_H;
+    // 화살표는 화살촉 때문에 실제로 글자를 담을 수 있는 폭이 더 좁으므로 여유를 더 둔다.
+    const usableW = shape === 'arrow' ? wPx * 0.5 : wPx * 0.86;
+    const usableH = shape === 'arrow' ? hPx * 0.5 : hPx * 0.8;
+    wrap.style.width = Math.max(20, usableW) + 'px';
+    wrap.style.height = Math.max(16, usableH) + 'px';
+    wrap.style.transform = `translate(-50%,-50%) rotate(${obj.rotation || 0}deg)`;
+  }
+  wrap.style.position = 'absolute'; wrap.style.left = '0'; wrap.style.top = '0';
+  wrap.style.pointerEvents = 'none';
+  wrap._reposition = reposition;
+  reposition();
+
+  const textEl = document.createElement('div');
+  textEl.className = 'zone-text-inner';
+  textEl.style.fontSize = obj.fontSize + 'px';
+  textEl.style.color = obj.textColor;
+  textEl.style.fontWeight = obj.fontWeight || 'normal';
+  textEl.innerText = obj.text || '';
+  wrap.appendChild(textEl);
+
+  function enterEdit(){
+    textEl.style.pointerEvents = 'auto';
+    textEl.contentEditable = true;
+    textEl.classList.add('editing');
+    clearTimeout(selectTimer); // 편집 중에는 자동 숨김 타이머 정지
+    textEl.focus();
+    const range = document.createRange();
+    range.selectNodeContents(textEl);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  wrap._enterEdit = enterEdit;
+  textEl.addEventListener('blur', ()=>{
+    textEl.contentEditable = false;
+    textEl.classList.remove('editing');
+    textEl.style.pointerEvents = 'none';
+    obj.text = textEl.innerText.trim();
+    textEl.innerText = obj.text;
+    if(FIREBASE_ENABLED) writeObjectRemote(obj);
+    resetSelectTimer();
+  });
+  textEl.addEventListener('pointerdown', (e)=>{
+    if(textEl.contentEditable === 'true') e.stopPropagation(); // 편집 중엔 드래그로 오인되지 않게
+  });
+  return wrap;
+}
+/* 도형(obj)의 더블클릭/더블탭 지점에 해당하는 텍스트 편집모드로 진입시킨다.
+   desktop dblclick과 모바일 더블탭 두 경로에서 공용으로 사용. */
+function enterZoneTextEdit(obj){
+  const shape = obj.shape || 'rect';
+  if(!ZONE_TEXT_SHAPES.has(shape)) return;
+  if(selectedId !== obj.id) selectObject(obj.id);
+  const markerEl = canvas.querySelector(`[data-oid="${obj.id}"]`);
+  const textWrap = markerEl && markerEl.querySelector('.zone-text');
+  if(textWrap && textWrap._enterEdit) textWrap._enterEdit();
+}
 function buildLineMarker(obj){
   if(obj.width === undefined) obj.width = 3;
   if(obj.dash === undefined) obj.dash = false;
@@ -1697,6 +1828,10 @@ function buildLineMarker(obj){
   wrap.style.top = my + '%';
   wrap.style.width = '0'; wrap.style.height = '0';
 
+  if(obj.type === 'zone'){
+    const textEl = buildZoneTextEl(obj);
+    if(textEl) wrap.appendChild(textEl);
+  }
   if(obj.id === selectedId){
     if(obj.type === 'line'){
       wrap.appendChild(buildMarkerControlsEl(obj, null));
@@ -1704,30 +1839,26 @@ function buildLineMarker(obj){
       // (패널을 강제로 다시 열지는 않음 — 사용자가 수동으로 닫았을 수도 있으므로, 내용만 최신화)
       buildLineDefaultsUI();
     } else {
-      const stylePanel = buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker');
-      const controlsRow = buildMarkerControlsEl(obj, stylePanel);
-      wrap.appendChild(controlsRow);
-      wrap.appendChild(stylePanel);
-      if(obj.shape === 'arrow'){
-        const rotateHandle = buildArrowRotateHandleEl(obj, wrap);
-        controlsRow._rotateHandle = rotateHandle; // 반전 버튼이 손잡이 위치도 같이 갱신할 수 있도록 연결
-        wrap.appendChild(rotateHandle);
-      }
+      attachZoneHandles(obj, wrap);
     }
   }
   return wrap;
 }
-/* 화살표 강조 도형 전용 회전 손잡이(파란 원). 도형 중심(=wrap의 기준점) 둘레를
+/* 구역(zone) 도형 공용 회전 손잡이(파란 원). 도형 중심(=wrap의 기준점) 둘레를
    드래그해서 원하는 방향으로 자유롭게 회전시킨다. 화면 픽셀 좌표를 그대로 써서
    각도를 계산하므로(퍼센트 좌표가 아님) 용지 가로세로 비율과 무관하게 마우스 위치와
-   화살표 방향이 항상 일치한다. */
-function buildArrowRotateHandleEl(obj, wrap){
-  const R = 46; // 도형 중심으로부터 손잡이까지 거리(px)
+   도형 방향이 항상 일치한다. 손잡이까지의 거리(R)는 도형 크기(대각선)에 맞춰
+   자동으로 넉넉하게 떨어지도록 계산해, 큰 도형이어도 손잡이가 도형 안에 묻히지 않는다.
+   (예전엔 화살표 강조 전용이었으나, 사각형/원형/삼각형/별/X/체크 등 모든 구역 도형에 공용으로 사용) */
+function buildZoneRotateHandleEl(obj, wrap){
   const handle = document.createElement('div');
   handle.className = 'rotate-handle';
-  handle.title = '드래그해서 화살표 방향 회전';
+  handle.title = '드래그해서 회전';
   handle.innerHTML = '<svg class="icn icn-only" viewBox="0 0 24 24" style="width:13px;height:13px;"><path d="M3 12a9 9 0 1 1 2.6 6.3"/><polyline points="3 17 3 21 7 21"/></svg>';
   function reposition(){
+    const wPx = Math.abs(obj.x2 - obj.x1) / 100 * CANVAS_BASE_W;
+    const hPx = Math.abs(obj.y2 - obj.y1) / 100 * CANVAS_BASE_H;
+    const R = Math.max(46, Math.hypot(wPx, hPx) / 2 + 30); // 도형 중심으로부터 손잡이까지 거리(px)
     const rad = (obj.rotation || 0) * Math.PI / 180;
     handle.style.left = (R * Math.cos(rad)) + 'px';
     handle.style.top = (R * Math.sin(rad)) + 'px';
@@ -1748,6 +1879,7 @@ function buildArrowRotateHandleEl(obj, wrap){
       obj.rotation = ((ang % 360) + 360) % 360;
       reposition();
       renderLineLayer();
+      refreshZoneHandlePositions(wrap); // 크기조절 손잡이 8개도 새 회전각도에 맞춰 함께 갱신
     }
     function up(){
       handle.style.cursor = 'grab';
@@ -1757,6 +1889,137 @@ function buildArrowRotateHandleEl(obj, wrap){
     bindTempPointerDrag(move, up);
   });
   return handle;
+}
+/* 구역(zone) 도형의 크기조절 손잡이 8개(모서리4 + 변중앙4) 정의.
+   nx/ny는 도형의 회전 전(로컬) 바운딩박스 안에서의 상대 위치(0=좌/상, 1=우/하, 0.5=중앙). */
+const ZONE_HANDLE_DEFS = [
+  {role:'nw', nx:0,   ny:0,   cursor:'nwse-resize'},
+  {role:'n',  nx:0.5, ny:0,   cursor:'ns-resize'},
+  {role:'ne', nx:1,   ny:0,   cursor:'nesw-resize'},
+  {role:'e',  nx:1,   ny:0.5, cursor:'ew-resize'},
+  {role:'se', nx:1,   ny:1,   cursor:'nwse-resize'},
+  {role:'s',  nx:0.5, ny:1,   cursor:'ns-resize'},
+  {role:'sw', nx:0,   ny:1,   cursor:'nesw-resize'},
+  {role:'w',  nx:0,   ny:0.5, cursor:'ew-resize'},
+];
+/* 도형 중심 기준 로컬(회전 전) 퍼센트 오프셋을, 화면에 실제로 보이는 픽셀 오프셋으로
+   변환한다(회전 반영). 크기조절 손잡이를 도형과 함께 항상 정확한 위치에 그리기 위해 사용. */
+function zoneLocalOffsetToScreenPx(dxPct, dyPct, deg){
+  let dx = dxPct / 100 * CANVAS_BASE_W;
+  let dy = dyPct / 100 * CANVAS_BASE_H;
+  if(deg){
+    const rad = deg * Math.PI / 180;
+    const rx = dx*Math.cos(rad) - dy*Math.sin(rad);
+    const ry = dx*Math.sin(rad) + dy*Math.cos(rad);
+    dx = rx; dy = ry;
+  }
+  return { dx, dy };
+}
+/* 파워포인트 도형처럼 모서리(4)·변 중앙(4) 총 8개의 흰 원 손잡이를 만든다.
+   각 손잡이를 드래그하면 그 방향에 해당하는 x1/y1/x2/y2 값만 조절되어 크기가 바뀌고,
+   반대쪽 변을 넘어 끌면 자연스럽게 좌우/상하가 뒤집힌다(반전).
+   도형이 회전되어 있으면, 마우스로 움직인 화면상 이동량을 도형의 회전 반대 방향으로
+   되돌려(rotateOffsetPct의 역회전) "도형 입장에서의" 이동량으로 바꾼 뒤 적용하므로,
+   회전된 상태에서도 손잡이를 끄는 방향과 도형이 커지는 방향이 항상 일치한다. */
+function buildZoneResizeHandlesEl(obj, container){
+  const group = document.createElement('div');
+  group.className = 'zone-resize-handles';
+  ZONE_HANDLE_DEFS.forEach(def=>{
+    const handle = document.createElement('div');
+    handle.className = 'zone-resize-handle';
+    handle.style.cursor = def.cursor;
+    handle.title = '드래그해서 크기 조절';
+
+    function reposition(){
+      const left = Math.min(obj.x1, obj.x2), top = Math.min(obj.y1, obj.y2);
+      const w = Math.abs(obj.x2 - obj.x1), h = Math.abs(obj.y2 - obj.y1);
+      const cx = left + w/2, cy = top + h/2;
+      const px = left + def.nx*w, py = top + def.ny*h;
+      const { dx, dy } = zoneLocalOffsetToScreenPx(px - cx, py - cy, obj.rotation || 0);
+      handle.style.left = dx + 'px';
+      handle.style.top = dy + 'px';
+    }
+    handle._reposition = reposition;
+    reposition();
+
+    handle.addEventListener('pointerdown', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      suppressNextClick = true;
+      resetSelectTimer();
+      const rect = stage.getBoundingClientRect();
+      const startX = e.clientX, startY = e.clientY;
+      const snap = { x1:obj.x1, y1:obj.y1, x2:obj.x2, y2:obj.y2 };
+      // 드래그 시작 시점에 x1/x2 중 어느 쪽이 좌/우(작은 값)인지 고정해두고,
+      // 이 필드만 갱신한다 — 반대쪽을 넘어가도(반전) 계속 같은 필드를 조절하므로 자연스럽다.
+      const leftField = snap.x1 <= snap.x2 ? 'x1' : 'x2';
+      const rightField = leftField === 'x1' ? 'x2' : 'x1';
+      const topField = snap.y1 <= snap.y2 ? 'y1' : 'y2';
+      const bottomField = topField === 'y1' ? 'y2' : 'y1';
+      const deg = obj.rotation || 0;
+      function move(ev){
+        const dxPct = ((ev.clientX - startX) / rect.width) * 100;
+        const dyPct = ((ev.clientY - startY) / rect.height) * 100;
+        const local = rotateOffsetPct(dxPct, dyPct, -deg); // 화면 이동량 → 도형 로컬(회전 전) 이동량
+        if(def.nx === 0) obj[leftField] = clampPct(snap[leftField] + local.dx);
+        if(def.nx === 1) obj[rightField] = clampPct(snap[rightField] + local.dx);
+        if(def.ny === 0) obj[topField] = clampPct(snap[topField] + local.dy);
+        if(def.ny === 1) obj[bottomField] = clampPct(snap[bottomField] + local.dy);
+        renderLineLayer();
+        updateMarkerWrapPosition(obj); // wrap 기준점(도형 중심)도 함께 갱신 → 손잡이가 도형을 따라감
+      }
+      function up(){
+        if(FIREBASE_ENABLED) writeObjectRemote(obj);
+        renderCanvas(); // 델/스타일 버튼 등 다른 마커 위치도 최종 크기에 맞게 갱신
+        resetSelectTimer();
+      }
+      bindTempPointerDrag(move, up);
+    });
+
+    group.appendChild(handle);
+  });
+  return group;
+}
+/* 크기조절 중(및 반전버튼 클릭 시) 회전 손잡이·크기조절 손잡이 8개 전체 위치를 한 번에 갱신 */
+function refreshZoneHandlePositions(container){
+  if(!container || !container.querySelectorAll) return;
+  container.querySelectorAll('.zone-resize-handle, .rotate-handle, .zone-text').forEach(h=>{
+    if(h._reposition) h._reposition();
+  });
+}
+/* 선/구역 마커 wrap 자체의 기준점(left/top, %) 을 obj의 최신 좌표로 다시 맞춘다.
+   손잡이(삭제·색상·크기조절·회전 버튼)들은 전부 이 wrap의 위치를 "도형 중심"으로 삼아
+   그 위에 px 오프셋으로 얹혀 있는데, 지금까지는 크기조절/전체이동 드래그 중에
+   SVG 도형만 다시 그리고(renderLineLayer) 이 wrap 자체의 위치는 갱신하지 않아서,
+   드래그하는 동안 손잡이들이 도형과 따로 노는(간격이 벌어지는) 문제가 있었다.
+   이 함수를 드래그 중 매 프레임 호출해 wrap 위치까지 함께 따라가도록 한다. */
+function updateMarkerWrapPosition(obj){
+  const wrapEl = canvas.querySelector(`[data-oid="${obj.id}"]`);
+  if(!wrapEl) return;
+  let mx, my;
+  if(obj.type === 'line'){
+    const mid = obj.points[Math.floor(obj.points.length/2)];
+    mx = mid.x; my = mid.y;
+  } else {
+    mx = (obj.x1 + obj.x2) / 2; my = (obj.y1 + obj.y2) / 2;
+  }
+  wrapEl.style.left = mx + '%';
+  wrapEl.style.top = my + '%';
+  if(obj.type === 'zone') refreshZoneHandlePositions(wrapEl);
+}
+/* 구역(zone) 도형 선택 시: 스타일 패널·삭제/색상 버튼 + 크기조절 손잡이 8개 + 회전 손잡이를
+   한번에 붙인다. buildLineMarker(전체 재렌더)와 updateSelectionUI(선택만 갱신) 두 경로에서
+   공용으로 사용해, 둘의 동작이 어긋나지 않도록 한다. */
+function attachZoneHandles(obj, container){
+  const zoneTextEl = container.querySelector('.zone-text-inner'); // 글자크기/굵기/색상 조절 시 실시간 반영 대상
+  const stylePanel = buildStylePanelEl(obj, ()=>{ renderLineLayer(); }, 'marker', zoneTextEl);
+  const controlsRow = buildMarkerControlsEl(obj, stylePanel);
+  container.appendChild(controlsRow);
+  container.appendChild(stylePanel);
+  container.appendChild(buildZoneResizeHandlesEl(obj, container));
+  const rotateHandle = buildZoneRotateHandleEl(obj, container);
+  controlsRow._rotateHandle = rotateHandle;
+  container.appendChild(rotateHandle);
 }
 /* 선/구역 공용 스타일 패널(색상·두께·점선). onChangeVisual: 값 변경 시 SVG 다시 그릴 콜백
    variant='marker'면 선/구역 마커(삭제·색상 버튼) 아래쪽에 겹치지 않게 배치 */
@@ -2205,8 +2468,15 @@ function buildStylePanelEl(obj, onChangeVisual, variant, bubbleTextEl, bubbleWra
       resetSelectTimer();
     });
     lineSection.appendChild(boxBtn);
+  }
 
-    /* ---- 글자 특성: 크기/색상 — 바깥의 🔤 아이콘이 이 섹션을 열고 닫는다 ---- */
+  /* ---- 글자 특성(크기/굵기/색상): 말풍선뿐 아니라, 구역설정 중 안에 글자를 넣을 수 있는
+     도형(사각형/원형/삼각형/별/화살표)에도 공용으로 제공한다.
+     말풍선은 바깥의 🔤 아이콘이 이 섹션을 열고 닫고, 구역(marker)은 그런 아이콘이 따로
+     없으므로 "🖊 선 특성 선택"과 똑같이 패널 안에 토글 버튼을 바로 노출한다. ---- */
+  const showTextSection = (variant === 'bubble') ||
+    (variant === 'marker' && obj.type === 'zone' && ZONE_TEXT_SHAPES.has(obj.shape || 'rect'));
+  if(showTextSection){
     const textToggleBtn = document.createElement('button');
     textToggleBtn.type = 'button';
     textToggleBtn.className = 'section-toggle-btn';
@@ -2221,7 +2491,7 @@ function buildStylePanelEl(obj, onChangeVisual, variant, bubbleTextEl, bubbleWra
       textSection.style.display = open ? 'none' : 'flex';
       resetSelectTimer();
     });
-    // textToggleBtn 자체는 화면에 붙이지 않음(바깥 🔤 아이콘이 대신 열고 닫음)
+    if(variant === 'marker') panel.appendChild(textToggleBtn); // 말풍선은 바깥 🔤 아이콘이 대신 열고 닫음(기존과 동일)
     panel.appendChild(textSection);
     panel._textSection = textSection; // 말풍선의 바깥 🔤 아이콘에서 이 섹션을 직접 열고 닫기 위한 참조
 
@@ -3383,23 +3653,32 @@ canvasWrap.addEventListener('pointerdown', (e)=>{
 document.getElementById('bgUpload').addEventListener('change', async function(e){
   const file = e.target.files[0];
   if(!file) return;
+  let dataURL;
   try{
     // 배경 사진은 최대 1400px로 리사이즈+JPEG 압축 후 저장
     // (Firebase Storage는 결제 등록이 필요해졌으므로 사용하지 않고, Realtime Database에 바로 저장)
-    const dataURL = await fileToResizedJPEG(file, 1400, 0.8);
-    state.bgDataURL = dataURL;
-    sharedBgCache = dataURL; // 공용 배경으로도 저장 → 다른 날짜/새 계획으로 넘어가도 계속 이어서 보임
-    currentPlanHasOwnBg = true;
-    renderCanvas();
-    if(FIREBASE_ENABLED){
-      await fbDb.ref(`plans/${state.date}/bgURL`).set(dataURL);
-      await fbDb.ref('sharedBg/url').set(dataURL);
-    } else {
-      idbSaveBg(SHARED_BG_KEY, dataURL);
-    }
+    dataURL = await fileToResizedJPEG(file, 1400, 0.8);
   }catch(err){
     console.error(err);
-    alert('배경사진을 불러오지 못했습니다.');
+    alert('배경사진 파일을 읽지 못했습니다. 다른 사진으로 다시 시도해 주세요.');
+    return;
+  }
+  state.bgDataURL = dataURL;
+  sharedBgCache = dataURL; // 공용 배경으로도 저장 → 다른 날짜/새 계획으로 넘어가도 계속 이어서 보임
+  currentPlanHasOwnBg = true;
+  renderCanvas();
+  idbSaveBg(SHARED_BG_KEY, dataURL); // 실시간 모드여도 다음 접속 때 즉시 보여줄 수 있도록 로컬에도 캐시
+  if(FIREBASE_ENABLED){
+    try{
+      await fbDb.ref(`plans/${state.date}/bgURL`).set(dataURL);
+      await fbDb.ref('sharedBg/url').set(dataURL);
+    }catch(err){
+      // 화면에는 이미 반영됐지만(로컬), 서버 저장이 실패한 것 — 다른 날짜/기기로 넘어가면
+      // 이 사진이 사라진 것처럼 보이는 원인이 되므로 반드시 알려준다.
+      handleFirebaseError('배경사진 저장(plans/bgURL, sharedBg/url)', err);
+    }
+  } else {
+    idbSaveBg(SHARED_BG_KEY, dataURL);
   }
 });
 function removeBackground(){
@@ -3411,6 +3690,7 @@ function removeBackground(){
   sharedBgCache = null; // 명시적으로 삭제 → 공용 배경도 함께 지워서 이후 날짜/새 계획에도 더 이상 이어지지 않음
   currentPlanHasOwnBg = false;
   renderCanvas();
+  idbDeleteBg(SHARED_BG_KEY); // 실시간 모드여도 로컬 즉시표시용 캐시를 함께 지워야, 지운 사진이 다음 접속 때 다시 잠깐 보이지 않음
   if(FIREBASE_ENABLED){
     fbDb.ref(`plans/${state.date}/bgURL`).remove();
     fbDb.ref(`plans/${state.date}/bgSizeW`).remove();
@@ -3418,8 +3698,6 @@ function removeBackground(){
     fbDb.ref(`plans/${state.date}/bgPosX`).remove();
     fbDb.ref(`plans/${state.date}/bgPosY`).remove();
     fbDb.ref('sharedBg/url').remove();
-  } else {
-    idbDeleteBg(SHARED_BG_KEY);
   }
 }
 
@@ -3542,9 +3820,40 @@ function subscribeToDate(date){
       state.bgDataURL = val.bgURL;
       sharedBgCache = val.bgURL; // 공용 배경 캐시도 최신 상태로 갱신
       currentPlanHasOwnBg = true;
-    } else {
+      idbSaveBg(SHARED_BG_KEY, val.bgURL); // 다음 접속 시 즉시 보여줄 로컬 캐시도 함께 갱신
+    } else if(sharedBgCache){
       state.bgDataURL = sharedBgCache; // 이 날짜에 자신만의 배경이 없으면 공용 배경을 그대로 이어서 사용
       currentPlanHasOwnBg = false;
+    } else {
+      // 공용 배경 캐시(sharedBgCache)가 아직 채워지지 않은 상태(예: 방금 새로고침해서
+      // subscribeSharedBg 리스너 응답이 아직 도착하지 않음)일 수 있으므로,
+      // 수동으로 한 번 즉시 조회해서 화면이 빈 채로 남아있지 않게 한다.
+      // (이 조회 없이 리스너 응답만 기다리면, 응답이 오기 전까지 배경이 빈 화면으로 보이다가
+      //  날짜를 한번 옮겼다 와야만 정상적으로 나오는 것처럼 보이는 문제가 있었음)
+      currentPlanHasOwnBg = false;
+      state.bgDataURL = null;
+      const dateAtRequest = date;
+      fbDb.ref('sharedBg/url').once('value').then(async snap=>{
+        let url = snap.val() || null;
+        if(!url){
+          // 공용 배경 포인터(sharedBg/url) 자체가 비어있는 경우(예: 다른 날짜에서
+          // "배경 삭제"를 눌렀거나, 아직 한 번도 기록되지 못한 경우)를 대비한 마지막 안전장치.
+          // 가장 최근에 "자기만의 배경사진"을 가졌던 이전 날짜를 직접 찾아 이어붙인다
+          // — 사용자가 "전날로 갔다가 다시 오늘로 오면 나온다"고 한 것과 같은 원리를 자동화.
+          url = await findLatestPriorBackgroundUrl(dateAtRequest);
+          if(url){
+            fbDb.ref('sharedBg/url').set(url).catch(()=>{}); // 앞으로도 빠르게 이어지도록 포인터 복구(실패해도 무시)
+          }
+        }
+        if(url) sharedBgCache = url;
+        if(url) idbSaveBg(SHARED_BG_KEY, url); // 다음 접속 시 곧바로 보여줄 수 있도록 로컬 캐시 갱신
+        // 조회하는 동안 사용자가 이미 다른 날짜로 넘어갔거나(state.date 변경),
+        // 그 사이 이 날짜 자신의 배경이 따로 들어왔다면(currentPlanHasOwnBg=true) 덮어쓰지 않는다.
+        if(state.date === dateAtRequest && !currentPlanHasOwnBg){
+          state.bgDataURL = url;
+          renderCanvas();
+        }
+      }).catch(err=> handleFirebaseError('sharedBg/url 즉시 조회', err));
     }
     state.bgSizeW = (val.bgSizeW != null) ? val.bgSizeW : 100;
     state.bgSizeH = (val.bgSizeH != null) ? val.bgSizeH : 100;
@@ -3562,7 +3871,7 @@ function subscribeToDate(date){
     });
     updateHeaderDisplay();
     renderCanvas();
-  });
+  }, (err)=> handleFirebaseError(`plans/${date} 구독`, err));
   subscribePresence(date);
   refreshHistorySelect();
 }
@@ -3573,11 +3882,49 @@ function subscribeToDate(date){
 function subscribeSharedBg(){
   fbDb.ref('sharedBg/url').on('value', (snap)=>{
     sharedBgCache = snap.val() || null;
+    if(sharedBgCache) idbSaveBg(SHARED_BG_KEY, sharedBgCache); // 다음 접속 시 즉시 표시용 로컬 캐시 갱신
     if(!currentPlanHasOwnBg){
       state.bgDataURL = sharedBgCache;
       renderCanvas();
     }
-  });
+  }, (err)=> handleFirebaseError('sharedBg/url 구독', err));
+}
+/* 공용 배경 포인터(sharedBg/url)가 비어있을 때의 마지막 안전장치: beforeDate보다 앞선
+   날짜들 중 가장 최근에 "자기만의 배경사진(bgURL)"을 가졌던 날짜를 찾아 그 URL을 반환한다.
+   (최대 60개 날짜까지만 거슬러 올라가며, 그 안에 없으면 포기하고 null 반환) */
+async function findLatestPriorBackgroundUrl(beforeDate){
+  try{
+    const snap = await fbDb.ref('plans').orderByKey().endBefore(beforeDate).limitToLast(60).once('value');
+    const val = snap.val() || {};
+    const dates = Object.keys(val).sort().reverse(); // 최신 날짜부터
+    for(const d of dates){
+      if(val[d] && val[d].bgURL) return val[d].bgURL;
+    }
+  }catch(err){
+    handleFirebaseError('이전 날짜 배경사진 조회', err);
+  }
+  return null;
+}
+/* Firebase 읽기/쓰기 오류를 조용히 흘려보내지 않고 화면에 한 번은 알려준다.
+   (특히 Realtime Database 규칙이 "테스트 모드"로 켜져 있다가 시간이 지나 자동으로
+   접근이 막히면, .on('value', ...) 리스너는 에러 콜백을 지정해두지 않는 한 아무 알림 없이
+   그대로 멈춰버려서 "배경사진/저장이 날짜를 바꾸면 이어지지 않는다"처럼 보일 수 있다.
+   그래서 이런 권한 오류가 나면 원인을 바로 알 수 있도록 여기서 명확히 알려준다.) */
+let firebasePermissionAlertShown = false;
+function handleFirebaseError(context, err){
+  console.error(`[Firebase] ${context} 오류:`, err);
+  if(firebasePermissionAlertShown) return; // 같은 세션에서 반복 경고하지 않음
+  firebasePermissionAlertShown = true;
+  const isPermission = err && err.code === 'PERMISSION_DENIED';
+  alert(
+    (isPermission
+      ? '⚠ 실시간 데이터 접근이 거부되었습니다 (권한 오류).\n\n' +
+        'Firebase 콘솔 > Realtime Database > 규칙(Rules)이 막혀 있을 수 있습니다.\n' +
+        '(테스트 모드 규칙은 보통 설정 후 30일이 지나면 자동으로 읽기/쓰기가 모두 차단됩니다)\n\n'
+      : `⚠ 실시간 저장/동기화 중 오류가 발생했습니다.\n(${context})\n\n`) +
+    '이 상태에서는 배경사진·저장 내용이 팀원 화면 및 날짜 전환 시 더 이상 정상적으로 동기화되지 않을 수 있습니다.\n' +
+    'Firebase 콘솔의 규칙과 인터넷 연결을 확인해 주세요.'
+  );
 }
 
 function subscribePresence(date){
@@ -3848,6 +4195,18 @@ function checkMobileAndWarn(){
   document.getElementById('workDate').value = state.date;
   updateHeaderDisplay();
   if(FIREBASE_ENABLED){
+    // 서버(Firebase) 응답을 기다리는 몇 초 동안 화면이 비어 보이지 않도록,
+    // 이 기기에 로컬로 저장해 둔 "가장 최근 배경사진"을 우선 즉시 보여준다.
+    // 잠시 후 subscribeSharedBg/subscribeToDate의 실제 응답이 오면 정확한 값으로 자동 갱신된다
+    // (같은 사진이면 화면상 변화 없이 그대로, 다른 사진이면 자연스럽게 교체됨).
+    idbLoadBg(SHARED_BG_KEY).then(cachedBg=>{
+      if(cachedBg && !state.bgDataURL){
+        sharedBgCache = cachedBg;
+        state.bgDataURL = cachedBg;
+        canvasWrap.style.backgroundImage = `url(${cachedBg})`;
+        applyBgSize();
+      }
+    });
     subscribeSharedBg(); // 날짜와 무관한 공용 배경사진을 앱 시작 시 한 번만 구독
     subscribeToDate(state.date);
   } else {
