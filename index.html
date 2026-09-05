@@ -403,6 +403,68 @@
 
   /* ---------------- 좌/우 아이콘 레일 + 펼침 패널(Lightroom 스타일) ---------------- */
   #appBody{ display:flex; align-items:stretch; gap:10px; flex:1; min-height:0; }
+  /* 인쇄/사진(html2canvas 대상=#printArea) 바깥의 여백 영역 — 여기 붙인 메모는
+     출력물(PDF/PNG)에 절대 포함되지 않는다(캡처 대상이 #printArea 하나뿐이라 자동으로 제외됨).
+     빈 상태를 은은한 사선 빗금으로 표시해 "여기는 출력 안 되는 메모용 공간"임을 알려준다. */
+  #marginNotesArea{
+    width:230px; flex-shrink:0; display:flex; flex-direction:column; min-height:0;
+    background:repeating-linear-gradient(135deg, rgba(0,0,0,.05) 0 2px, transparent 2px 14px), #fafafa;
+    border:1px dashed #ccc; border-radius:10px; padding:10px;
+    position:relative; /* 오른쪽 폭조절 손잡이의 기준 */
+  }
+  #marginNotesResizeHandle{
+    position:absolute; top:0; bottom:0; right:-5px; width:10px;
+    cursor:ew-resize; z-index:5;
+  }
+  #marginNotesResizeHandle::after{
+    content:''; position:absolute; top:50%; left:50%; width:3px; height:36px;
+    transform:translate(-50%,-50%); border-radius:2px; background:#ccc;
+  }
+  #marginNotesResizeHandle:hover::after{ background:var(--blue); }
+  /* 메모 안에서 글자를 드래그로 부분 선택하면 그 위에 뜨는 작은 서식 툴바(글자크기/색상) */
+  #marginNoteFormatBar{
+    position:fixed; display:none; align-items:center; gap:6px;
+    background:#fff; border:1px solid #ddd; border-radius:10px; padding:6px 8px;
+    box-shadow:0 6px 18px rgba(0,0,0,.28); z-index:200; transform:translate(-50%,-100%);
+  }
+  #marginNoteFormatBar .swatch{ width:18px; height:18px; }
+  #marginNoteFormatBar input[type=number]{
+    width:40px; padding:2px 3px; font-size:11px; text-align:center;
+    border:1px solid #ccc; border-radius:4px;
+  }
+  #marginNoteFormatBar .stepper-btn{ width:20px; height:20px; font-size:12px; }
+  .margin-note-format-close{
+    width:20px; height:20px; padding:0; border:none; background:transparent;
+    color:#999; font-size:15px; line-height:1; cursor:pointer; flex:none;
+  }
+  .margin-note-format-close:hover{ color:#e74c3c; }
+  #marginNotesHeader{
+    display:flex; flex-direction:column; gap:6px; margin-bottom:8px;
+    font-size:12px; font-weight:bold; color:#666;
+  }
+  #marginNotesHeader small{ font-weight:normal; color:#999; display:block; font-size:10px; }
+  #marginNotesHeader button{ width:100%; }
+  #marginNotesList{ flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+  .margin-note-card{
+    position:relative; background:#fffde0; border:1px solid #e8dfa0; border-radius:8px;
+    box-shadow:1px 2px 4px rgba(0,0,0,.12); padding:10px 22px 10px 10px;
+  }
+  .margin-note-text{
+    display:block; white-space:pre-wrap; word-break:break-word; outline:none;
+    font-size:12.5px; line-height:1.5; color:#333; min-height:1.5em;
+  }
+  /* 서식 툴바로 방금 크기/색상/굵기를 적용한 부분의 표시. 브라우저 기본 텍스트 선택
+     하이라이트와 달리, 포커스 이동이나 재렌더와 무관하게 X 버튼을 누르기 전까지
+     항상 표시된다(저장되는 값에는 포함되지 않는 화면 표시 전용 class). */
+  .note-format-active{ background:rgba(26,92,173,.28); border-radius:2px; }
+  .margin-note-del{
+    position:absolute; top:4px; right:4px; width:18px; height:18px; border-radius:50%;
+    background:#e74c3c; color:#fff; font-size:12px; line-height:18px; text-align:center;
+    cursor:pointer; user-select:none;
+  }
+  @media (max-width:760px){
+    #marginNotesArea{ display:none; } /* 모바일은 화면이 좁아 메모 영역을 숨김(PC 전용 안내와 일관) */
+  }
   .side-rail{
     display:flex; flex-direction:column; gap:6px; align-items:center; justify-content:flex-start;
     background:#fff; border:1px solid #ddd; border-radius:8px; padding:6px;
@@ -540,6 +602,14 @@
 </div>
 
 <div id="appBody">
+  <div id="marginNotesArea">
+    <div id="marginNotesHeader">
+      <span>📝 공지내용 <small>(사진·PDF 출력에 포함되지 않음)</small></span>
+      <button type="button" class="secondary" id="addMarginNoteBtn" onclick="addMarginNote()">+ 메모 추가</button>
+    </div>
+    <div id="marginNotesList"></div>
+    <div id="marginNotesResizeHandle" title="드래그해서 폭 조절"></div>
+  </div>
   <div id="stageWrap">
     <div id="printArea">
       <div id="sheet">
@@ -3905,6 +3975,354 @@ async function findLatestPriorBackgroundUrl(beforeDate){
   }
   return null;
 }
+/* ---------------- 참고 메모(인쇄영역 밖 여백) ----------------
+   #printArea 바깥(왼쪽 여백)에 붙는 메모. html2canvas 캡처 대상이 #printArea 하나뿐이라
+   PDF/사진 출력에는 절대 포함되지 않는다. 작업일(날짜)과 무관하게 공용으로 유지되는
+   "작성 가이드/체크리스트" 성격이라(예: 업체별 필수 입력 항목 안내), 배경사진의
+   sharedBg와 마찬가지로 날짜별 계획(plans/날짜)과는 별도로 저장·동기화한다. */
+let marginNotes = [];
+const MARGIN_NOTES_LOCAL_KEY = 'dpp_marginNotes';
+/* 메모 안 글자를 일부만 드래그로 선택해 크기/색상을 다르게 줄 수 있도록, 메모 내용을
+   plain text가 아니라 <span style="color:...;font-size:...">로 감싼 HTML로 저장한다.
+   저장/실시간 동기화(Firebase)로 다른 사람의 값이 들어올 수 있으므로, 반드시 이 함수를 거쳐서
+   span의 style(color/font-size)과 br, 순수 텍스트만 남기고 나머지 태그·속성(script, onclick 등)은
+   전부 제거한 뒤에만 innerHTML에 반영한다. */
+function sanitizeMarginNoteHtml(html){
+  const src = document.createElement('div');
+  src.innerHTML = html || '';
+  const out = document.createElement('div');
+  function copyChildren(srcNode, outNode){
+    srcNode.childNodes.forEach(child=>{
+      if(child.nodeType === Node.TEXT_NODE){
+        outNode.appendChild(document.createTextNode(child.textContent));
+      } else if(child.nodeType === Node.ELEMENT_NODE){
+        const tag = child.tagName.toLowerCase();
+        if(tag === 'br' || tag === 'div'){
+          // contentEditable에서 줄바꿈이 <div>로 생기는 브라우저도 있어 br로 통일
+          if(outNode.lastChild) outNode.appendChild(document.createElement('br'));
+          copyChildren(child, outNode);
+        } else if(tag === 'span'){
+          const style = child.getAttribute('style') || '';
+          const colorMatch = style.match(/color:\s*(#[0-9a-fA-F]{3,8}|rgb\([^)]+\))/i);
+          const sizeMatch = style.match(/font-size:\s*([\d.]+px)/i);
+          const weightMatch = style.match(/font-weight:\s*(bold|normal|[1-9]00)/i);
+          const styles = [];
+          if(colorMatch) styles.push('color:' + colorMatch[1]);
+          if(sizeMatch) styles.push('font-size:' + sizeMatch[1]);
+          if(weightMatch) styles.push('font-weight:' + weightMatch[1]);
+          if(styles.length){
+            const span = document.createElement('span');
+            span.setAttribute('style', styles.join(';'));
+            copyChildren(child, span);
+            outNode.appendChild(span);
+          } else {
+            copyChildren(child, outNode); // 서식 없는 span은 그냥 내용만
+          }
+        } else {
+          copyChildren(child, outNode); // 그 외 태그는 벗기고 내용만 재귀적으로 복사
+        }
+      }
+    });
+  }
+  copyChildren(src, out);
+  return out.innerHTML;
+}
+function renderMarginNotes(){
+  const list = document.getElementById('marginNotesList');
+  if(!list) return;
+  // 지금 포커스가 가 있는(=한창 편집 중인) 메모는 통째로 다시 만들지 않고 기존 DOM을
+  // 그대로 재사용한다. 그렇지 않으면, 방금 나 자신이 보낸 변경사항의 실시간 동기화 echo가
+  // 돌아올 때마다 목록 전체를 새로 그리면서 지금 선택해둔 글자 범위·서식 툴바가
+  // (그 DOM이 통째로 교체되어 버려서) 사라지는 문제가 있었다.
+  const activeCard = document.activeElement && document.activeElement.closest &&
+    document.activeElement.closest('.margin-note-card');
+  const keepId = activeCard ? activeCard.dataset.mid : null;
+  const keepEl = keepId ? list.querySelector(`[data-mid="${keepId}"]`) : null;
+
+  list.innerHTML = '';
+  marginNotes.forEach(note=>{
+    if(keepEl && note.id === keepId){
+      list.appendChild(keepEl);
+      return;
+    }
+    const card = document.createElement('div');
+    card.className = 'margin-note-card';
+    card.dataset.mid = note.id;
+
+    const delBtn = document.createElement('div');
+    delBtn.className = 'margin-note-del';
+    delBtn.innerText = '×';
+    delBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      deleteMarginNote(note.id);
+    });
+    card.appendChild(delBtn);
+
+    const textEl = document.createElement('div');
+    textEl.className = 'margin-note-text';
+    textEl.contentEditable = true;
+    // note.html(부분 서식 포함)이 있으면 그걸 쓰고, 예전에 저장된 note.text(순수 텍스트)만
+    // 있는 경우와도 호환되도록 그 값을 escape해서 보여준다.
+    textEl.innerHTML = note.html ? sanitizeMarginNoteHtml(note.html)
+      : (note.text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    textEl.addEventListener('blur', ()=>{
+      note.html = sanitizeMarginNoteHtml(textEl.innerHTML);
+      note.text = textEl.innerText; // 검색·백업 호환용 순수 텍스트도 함께 보관
+      saveMarginNotes();
+      // 서식 툴바는 여기서 건드리지 않는다 — X 버튼을 눌러야만 닫힌다.
+    });
+    card.appendChild(textEl);
+
+    list.appendChild(card);
+  });
+}
+function addMarginNote(){
+  const note = { id: 'mn' + (uidSeq++), text: '', html: '' };
+  marginNotes.push(note);
+  renderMarginNotes();
+  saveMarginNotes();
+  // 새로 추가한 메모는 바로 타이핑할 수 있도록 포커스
+  const list = document.getElementById('marginNotesList');
+  const card = list && list.querySelector(`[data-mid="${note.id}"] .margin-note-text`);
+  if(card) card.focus();
+}
+function deleteMarginNote(id){
+  marginNotes = marginNotes.filter(n=>n.id !== id);
+  renderMarginNotes();
+  saveMarginNotes();
+}
+function saveMarginNotes(){
+  if(FIREBASE_ENABLED){
+    const map = {};
+    marginNotes.forEach(n=>{ map[n.id] = n; });
+    fbDb.ref('marginNotes').set(map).catch(err=> handleFirebaseError('marginNotes 저장', err));
+  } else {
+    try{ localStorage.setItem(MARGIN_NOTES_LOCAL_KEY, JSON.stringify(marginNotes)); }
+    catch(err){ console.error('참고 메모 로컬 저장 실패:', err); }
+  }
+}
+function subscribeMarginNotes(){
+  fbDb.ref('marginNotes').on('value', (snap)=>{
+    const val = snap.val() || {};
+    marginNotes = Object.keys(val).map(id=> Object.assign({id}, val[id]));
+    renderMarginNotes();
+  }, (err)=> handleFirebaseError('marginNotes 구독', err));
+}
+function loadMarginNotesLocal(){
+  try{
+    const raw = localStorage.getItem(MARGIN_NOTES_LOCAL_KEY);
+    marginNotes = raw ? JSON.parse(raw) : [];
+  }catch(err){
+    console.error('참고 메모 로컬 불러오기 실패:', err);
+    marginNotes = [];
+  }
+  renderMarginNotes();
+}
+/* ---- 메모 글자 부분 선택 서식(글자크기/색상) 툴바 ----
+   메모(.margin-note-text) 안에서 글자를 드래그로 일부만 선택하면 그 위에 작은 툴바가 떠서,
+   선택한 부분에만 글자크기/색상을 각각 다르게 지정할 수 있다(문서 전체가 아니라 부분 서식). */
+let noteFormatBarEl = null;
+let noteFormatSelRange = null; // 아직 서식을 한 번도 적용하지 않은, 사용자가 처음 드래그로 선택한 범위
+let activeFormatSpan = null; // 서식을 적용해서 만든 span. 있으면 이후 조작은 전부 이 span에 누적된다.
+function buildNoteFormatBar(){
+  const bar = document.createElement('div');
+  bar.id = 'marginNoteFormatBar';
+
+  const sizeMinus = document.createElement('button');
+  sizeMinus.type = 'button'; sizeMinus.className = 'stepper-btn'; sizeMinus.innerText = '−';
+  const sizeInput = document.createElement('input');
+  sizeInput.type = 'number'; sizeInput.min = '9'; sizeInput.max = '48'; sizeInput.step = '1';
+  const sizePlus = document.createElement('button');
+  sizePlus.type = 'button'; sizePlus.className = 'stepper-btn'; sizePlus.innerText = '＋';
+
+  function currentSize(){
+    const n = parseInt(sizeInput.value, 10);
+    return isNaN(n) ? 12.5 : n;
+  }
+  function applySize(n){
+    n = Math.max(9, Math.min(48, n));
+    sizeInput.value = n;
+    applyInlineStyleToSavedSelection('fontSize', n + 'px');
+  }
+  [sizeMinus, sizePlus].forEach(el=>{
+    el.addEventListener('mousedown', (e)=> e.preventDefault()); // 선택영역이 풀리지 않게
+  });
+  sizeMinus.addEventListener('click', ()=> applySize(currentSize() - 1));
+  sizePlus.addEventListener('click', ()=> applySize(currentSize() + 1));
+  sizeInput.addEventListener('change', ()=> applySize(currentSize()));
+  bar.appendChild(sizeMinus);
+  bar.appendChild(sizeInput);
+  bar.appendChild(sizePlus);
+
+  const sep = document.createElement('span');
+  sep.style.cssText = 'width:1px;height:16px;background:#ddd;';
+  bar.appendChild(sep);
+
+  const boldBtn = document.createElement('button');
+  boldBtn.type = 'button';
+  boldBtn.className = 'dash-toggle-btn';
+  boldBtn.style.fontWeight = 'bold';
+  boldBtn.innerText = '굵게';
+  boldBtn.addEventListener('mousedown', (e)=> e.preventDefault());
+  boldBtn.addEventListener('click', ()=>{
+    const willBold = !boldBtn.classList.contains('active');
+    boldBtn.classList.toggle('active', willBold);
+    applyInlineStyleToSavedSelection('fontWeight', willBold ? 'bold' : 'normal');
+  });
+  bar.appendChild(boldBtn);
+
+  const sep2 = document.createElement('span');
+  sep2.style.cssText = 'width:1px;height:16px;background:#ddd;';
+  bar.appendChild(sep2);
+
+  TEXT_COLORS.forEach(c=>{
+    const sw = document.createElement('span');
+    sw.className = 'swatch';
+    sw.style.background = c;
+    sw.addEventListener('mousedown', (e)=> e.preventDefault());
+    sw.addEventListener('click', ()=> applyInlineStyleToSavedSelection('color', c));
+    bar.appendChild(sw);
+  });
+
+  const sep3 = document.createElement('span');
+  sep3.style.cssText = 'width:1px;height:16px;background:#ddd;';
+  bar.appendChild(sep3);
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'margin-note-format-close';
+  closeBtn.innerText = '×';
+  closeBtn.title = '닫기';
+  closeBtn.addEventListener('mousedown', (e)=> e.preventDefault());
+  closeBtn.addEventListener('click', ()=> hideNoteFormatBar());
+  bar.appendChild(closeBtn);
+
+  document.body.appendChild(bar);
+  return bar;
+}
+function getNoteFormatBar(){
+  if(!noteFormatBarEl) noteFormatBarEl = buildNoteFormatBar();
+  return noteFormatBarEl;
+}
+function hideNoteFormatBar(){
+  if(noteFormatBarEl) noteFormatBarEl.style.display = 'none';
+  // 하이라이트 표시(선택 유지 흉내)를 지운다 — X 버튼을 눌렀을 때만 여기로 온다.
+  if(activeFormatSpan) activeFormatSpan.classList.remove('note-format-active');
+  activeFormatSpan = null;
+  noteFormatSelRange = null;
+}
+function showNoteFormatBarForRange(range){
+  const bar = getNoteFormatBar();
+  noteFormatSelRange = range.cloneRange();
+  activeFormatSpan = null; // 새로 선택한 범위이므로, 다음 서식 적용 시 새 span을 만든다
+  const rect = range.getBoundingClientRect();
+  bar.style.display = 'flex';
+  const barW = bar.offsetWidth || 180;
+  let left = rect.left + rect.width / 2;
+  left = Math.max(barW / 2 + 4, Math.min(window.innerWidth - barW / 2 - 4, left));
+  let top = rect.top - 8;
+  if(top < 40) top = rect.bottom + 40; // 화면 맨 위라 툴바가 잘리면 선택영역 아래쪽에 표시
+  bar.style.left = left + 'px';
+  bar.style.top = top + 'px';
+}
+/* 지정한 style 속성(prop)이 root 내부의 자손 요소들에 이미 걸려 있으면 전부 지운다.
+   예: 이미 글자크기가 서로 다르게 섞여 있는 범위를 통째로 선택해서 새 크기를 적용하면,
+   바깥을 새 span으로 한 번 더 감싸도 "안쪽" span에 남아있는 예전 font-size가 CSS
+   우선순위상 그대로 이겨버려서 화면에 반영되지 않는 문제가 있었다. 새로 적용하는 값이
+   실제로 보이도록, 감싸기 전에 안쪽에 남아있는 같은 속성을 전부 제거한다. */
+function stripStyleProp(root, prop){
+  root.querySelectorAll('[style]').forEach(el=>{
+    el.style[prop] = '';
+    if(!el.getAttribute('style').trim()) el.removeAttribute('style');
+  });
+}
+function persistMarginNoteFromSpan(span){
+  const card = span.closest && span.closest('.margin-note-card');
+  const noteTextEl = card && card.querySelector('.margin-note-text');
+  const note = card && marginNotes.find(n=>n.id === card.dataset.mid);
+  if(note && noteTextEl){
+    note.html = sanitizeMarginNoteHtml(noteTextEl.innerHTML);
+    note.text = noteTextEl.innerText;
+    saveMarginNotes();
+  }
+}
+/* 서식(크기/색상/굵기)을 적용한다. 브라우저의 실제 텍스트 선택(Selection)에 기대지 않고,
+   우리가 만든 span에 'note-format-active' class로 직접 하이라이트를 표시해 두어서
+   — 다른 조작(포커스 이동, 실시간 동기화로 인한 재렌더 등)이 있어도 X 버튼을 누르기 전까지는
+   화면에 계속 표시된다. 같은 span에 크기→색상→굵기를 연달아 적용하면 매번 새로 감싸지 않고
+   기존 span의 스타일 값만 갱신해서 쌓아 올린다(불필요하게 겹겹이 감싸는 것 방지). */
+function applyInlineStyleToSavedSelection(styleProp, value){
+  if(activeFormatSpan && activeFormatSpan.isConnected){
+    activeFormatSpan.style[styleProp] = value;
+    stripStyleProp(activeFormatSpan, styleProp); // 혹시 안쪽에 같은 속성이 남아있으면 제거
+    persistMarginNoteFromSpan(activeFormatSpan);
+    clearNativeSelectionSafely();
+    return;
+  }
+  if(!noteFormatSelRange) return;
+  const range = noteFormatSelRange;
+  if(range.collapsed) return;
+  const span = document.createElement('span');
+  span.className = 'note-format-active';
+  span.style[styleProp] = value;
+  const frag = range.extractContents();
+  span.appendChild(frag);
+  stripStyleProp(span, styleProp); // 안쪽에 남은 예전 값 제거 → 새 값이 확실히 보이게
+  range.insertNode(span);
+  activeFormatSpan = span;
+  persistMarginNoteFromSpan(span);
+  clearNativeSelectionSafely();
+}
+/* 서식을 적용하려고 한 DOM 조작(extractContents/insertNode 등) 뒤에는, 브라우저의 실제
+   텍스트 선택(Selection)이 어중간하게 남아있을 수 있다. 이 잔여 선택이 마침 "선택되어 있음"
+   상태로 남아있으면, 아래 selectionchange 리스너가 이를 "사용자가 새로 드래그해서 선택했다"로
+   착각해 activeFormatSpan을 리셋해버려서 — 두 번째 서식(예: 크기 다음에 색상)을 누르면
+   하이라이트가 풀리는 것처럼 보이는 문제가 있었다. 하이라이트 표시는 이제 selection이 아니라
+   note-format-active class로 하므로, 조작 후 남은 선택은 안전하게 비워도 된다. */
+function clearNativeSelectionSafely(){
+  const sel = window.getSelection();
+  if(sel) sel.removeAllRanges();
+}
+/* 서식 툴바는 사용자가 직접 X(닫기) 버튼을 누르기 전까지는 닫히지 않는다.
+   메모 글자를 드래그로 선택하면(이미 떠 있든 아니든) 그 범위 위로 뜨거나 위치가 갱신되고,
+   선택이 잠깐 없어지거나 다른 곳을 클릭해도 자동으로는 닫히지 않는다.
+   닫는 것은 오직 X 버튼(closeBtn의 hideNoteFormatBar 호출)뿐이다. */
+document.addEventListener('selectionchange', ()=>{
+  const sel = window.getSelection();
+  if(!sel || sel.rangeCount === 0 || sel.isCollapsed) return; // 선택이 없어져도 그대로 유지(닫지 않음)
+  const range = sel.getRangeAt(0);
+  const container = range.commonAncestorContainer;
+  const el = container.nodeType === 1 ? container : container.parentElement;
+  const noteTextEl = el && el.closest && el.closest('.margin-note-text');
+  if(!noteTextEl) return; // 메모 밖 선택이면 무시(열려 있던 툴바도 그대로 둠)
+  showNoteFormatBarForRange(range); // 메모 안의 유효한 선택이면 띄우거나 위치만 갱신
+});
+/* ---- 참고 메모 영역 폭을 마우스로 드래그해 조절 ---- */
+(function setupMarginNotesResize(){
+  const area = document.getElementById('marginNotesArea');
+  const handle = document.getElementById('marginNotesResizeHandle');
+  if(!area || !handle) return;
+  const WIDTH_KEY = 'dpp_marginNotesWidth';
+  const MIN_W = 150, MAX_W = 520;
+  try{
+    const savedW = parseInt(localStorage.getItem(WIDTH_KEY), 10);
+    if(!isNaN(savedW)) area.style.width = Math.max(MIN_W, Math.min(MAX_W, savedW)) + 'px';
+  }catch(err){ /* 저장소를 못 쓰는 환경이면 기본 폭 그대로 사용 */ }
+  handle.addEventListener('pointerdown', (e)=>{
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = area.getBoundingClientRect().width;
+    function move(ev){
+      const w = Math.max(MIN_W, Math.min(MAX_W, startW + (ev.clientX - startX)));
+      area.style.width = w + 'px';
+    }
+    function up(){
+      try{ localStorage.setItem(WIDTH_KEY, Math.round(area.getBoundingClientRect().width)); }
+      catch(err){ /* 무시 */ }
+    }
+    bindTempPointerDrag(move, up);
+  });
+})();
 /* Firebase 읽기/쓰기 오류를 조용히 흘려보내지 않고 화면에 한 번은 알려준다.
    (특히 Realtime Database 규칙이 "테스트 모드"로 켜져 있다가 시간이 지나 자동으로
    접근이 막히면, .on('value', ...) 리스너는 에러 콜백을 지정해두지 않는 한 아무 알림 없이
@@ -4209,9 +4627,11 @@ function checkMobileAndWarn(){
     });
     subscribeSharedBg(); // 날짜와 무관한 공용 배경사진을 앱 시작 시 한 번만 구독
     subscribeToDate(state.date);
+    subscribeMarginNotes(); // 날짜와 무관한 공용 참고 메모(인쇄영역 밖) 구독
   } else {
     refreshHistorySelect();
     renderCanvas();
+    loadMarginNotesLocal();
     // 처음 여는 화면에도(아직 이 날짜만의 배경이 없다면) 마지막으로 첨부해 둔
     // 공용 배경사진을 이어서 보여준다 — 새로고침해도 배경이 사라지지 않도록.
     if(!state.bgDataURL){
